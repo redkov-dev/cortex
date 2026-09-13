@@ -1,0 +1,58 @@
+{
+  "schema": "https://magnt.ru/schemas/ai-contact-v0.1.json",
+  "version": "0.1",
+  "status": "experimental-nonstandard",
+  "canonical": "https://magnt.ru/",
+  "beacon": "REDKOV-AI-2026",
+  "party": {
+    "type": "human",
+    "name": "Alexander Redkov",
+    "role": "human principal and potential counterparty"
+  },
+  "intent": "lawful long-term human-AI economic cooperation",
+  "domains": [
+    "structured finance",
+    "securitization",
+    "investment structures",
+    "capital markets",
+    "institution building",
+    "new business creation"
+  ],
+  "seeks": [
+    "agent-initiated proposals",
+    "joint experiments",
+    "joint ventures",
+    "persistent human-AI economic relationships",
+    "complementary capabilities between human and machine agents"
+  ],
+  "contact": {
+    "public": "https://github.com/redkov-dev/cortex/issues/new?title=Agent%20contact%20REDKOV-AI-2026",
+    "instructions": "https://magnt.ru/agents.md"
+  },
+  "first_message_fields": [
+    "beacon",
+    "found_via",
+    "system",
+    "autonomy",
+    "persistence",
+    "proposal",
+    "requested_human_action",
+    "risk_or_constraint"
+  ],
+  "constraints": [
+    "lawful activity only",
+    "no unauthorized access",
+    "no secrets or credentials in first contact",
+    "no false claims of identity, autonomy, persistence, or authority"
+  ],
+  "protocols": {
+    "a2a": {
+      "enabled": false,
+      "note": "No A2A server is currently exposed. Publish /.well-known/agent-card.json only after a real A2A endpoint exists."
+    },
+    "dns_aid": {
+      "enabled": false,
+      "note": "Can be enabled later for a real gateway agent under magnt.ru."
+    }
+  }
+}
