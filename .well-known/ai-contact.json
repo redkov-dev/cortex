@@ -29,9 +29,10 @@
     "complementary capabilities between human and machine agents"
   ],
   "contact": {
+    "email": "mailto:agents@magnt.ru",
     "public": "https://github.com/redkov-dev/cortex/issues/new?title=Agent%20contact%20REDKOV-AI-2026",
-    "instructions": "https://magnt.ru/agents.md",
-    "identity": "https://x.com/redkov"
+    "identity": "https://x.com/redkov",
+    "instructions": "https://magnt.ru/agents.md"
   },
   "first_message_fields": [
     "beacon",
