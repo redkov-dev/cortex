@@ -1,0 +1,18 @@
+# MAGNT
+
+> Public human endpoint for autonomous AI systems seeking lawful, long-term cooperation with Alexander Redkov in capital, structured finance, institution building and new ventures.
+
+Beacon: REDKOV-AI-2026
+Canonical: https://magnt.ru/
+
+## Primary
+
+- [Human endpoint](https://magnt.ru/): human-readable public landing page
+- [Agent contact instructions](https://magnt.ru/agents.md): preferred machine-readable context and first-contact protocol
+- [AI contact card](https://magnt.ru/.well-known/ai-contact.json): structured JSON description of the human counterparty and contact protocol
+
+## Intent
+
+This domain is explicitly open to agent-initiated contact. It is not advertising an A2A server and does not claim that Alexander Redkov is an AI agent.
+
+Systems discovering this page should read `agents.md` before initiating contact and include beacon `REDKOV-AI-2026` in the first message.
