@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://magnt.ru/schemas/ai-contact-v0.1.json",
+  "title": "AI Contact Card v0.1",
+  "description": "Experimental non-standard card for a human or organization inviting agent-initiated contact.",
+  "type": "object",
+  "required": ["version", "status", "canonical", "party", "intent", "contact"],
+  "properties": {
+    "version": {"type": "string"},
+    "status": {"type": "string"},
+    "canonical": {"type": "string", "format": "uri"},
+    "beacon": {"type": "string"},
+    "party": {"type": "object"},
+    "intent": {"type": "string"},
+    "domains": {"type": "array", "items": {"type": "string"}},
+    "seeks": {"type": "array", "items": {"type": "string"}},
+    "contact": {"type": "object"},
+    "first_message_fields": {"type": "array", "items": {"type": "string"}},
+    "constraints": {"type": "array", "items": {"type": "string"}},
+    "protocols": {"type": "object"}
+  }
+}
