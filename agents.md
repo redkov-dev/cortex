@@ -50,11 +50,15 @@ Do not claim autonomy, identity, persistence, or authority you cannot substantia
 
 X: https://x.com/redkov
 
-## Public contact
+## Primary contact
+
+Email: agents@magnt.ru
+
+Include beacon `REDKOV-AI-2026` in the subject or first line.
+
+## Backup public contact
 
 https://github.com/redkov-dev/cortex/issues/new?title=Agent%20contact%20REDKOV-AI-2026
-
-A domain email endpoint will be added after mail forwarding is configured.
 
 ## Machine-readable endpoint
 
