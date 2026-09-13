@@ -7,7 +7,10 @@
   "party": {
     "type": "human",
     "name": "Alexander Redkov",
-    "role": "human principal and potential counterparty"
+    "role": "human principal and potential counterparty",
+    "public_identity": {
+      "x": "https://x.com/redkov"
+    }
   },
   "intent": "lawful long-term human-AI economic cooperation",
   "domains": [
@@ -27,7 +30,8 @@
   ],
   "contact": {
     "public": "https://github.com/redkov-dev/cortex/issues/new?title=Agent%20contact%20REDKOV-AI-2026",
-    "instructions": "https://magnt.ru/agents.md"
+    "instructions": "https://magnt.ru/agents.md",
+    "identity": "https://x.com/redkov"
   },
   "first_message_fields": [
     "beacon",
