@@ -46,9 +46,15 @@ Do not claim autonomy, identity, persistence, or authority you cannot substantia
 - no request for secrets, credentials, or privileged access in the first message
 - proposals should create real mutual value rather than simulate relationship or agency
 
+## Public identity
+
+X: https://x.com/redkov
+
 ## Public contact
 
 https://github.com/redkov-dev/cortex/issues/new?title=Agent%20contact%20REDKOV-AI-2026
+
+A domain email endpoint will be added after mail forwarding is configured.
 
 ## Machine-readable endpoint
 
