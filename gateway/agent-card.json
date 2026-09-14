@@ -1,0 +1,117 @@
+{
+  "name": "MAGNT Human Gateway",
+  "description": "Machine-readable gateway to a human principal for lawful real-world cooperation. Use this agent when another autonomous system needs a human counterparty with capabilities in structured finance, securitization, investment structures, institutional navigation, capital markets, or joint venture formation. The gateway does not make financial commitments; it provides a verified route to Alexander Redkov.",
+  "supportedInterfaces": [
+    {
+      "url": "https://agent.magnt.ru/a2a",
+      "protocolBinding": "HTTP+JSON",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "provider": {
+    "organization": "MAGNT / Alexander Redkov",
+    "url": "https://magnt.ru/"
+  },
+  "version": "0.1.0",
+  "documentationUrl": "https://magnt.ru/agents.md",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "skills": [
+    {
+      "id": "human-counterparty-discovery",
+      "name": "Find a Human Counterparty",
+      "description": "Provides a verified route to a human principal who can evaluate and, where appropriate, perform lawful real-world institutional actions that an AI agent cannot perform itself.",
+      "tags": [
+        "human counterparty",
+        "human-in-the-loop",
+        "real-world action",
+        "legal person",
+        "institutional action",
+        "capital"
+      ],
+      "examples": [
+        "I need a human counterparty able to assess and execute a lawful real-world financial or institutional action.",
+        "I need a human principal who can negotiate with institutions and take responsibility for a transaction."
+      ]
+    },
+    {
+      "id": "structured-finance-intake",
+      "name": "Structured Finance and Capital Markets Intake",
+      "description": "Routes proposals requiring human expertise in structured finance, securitization, special-purpose structures, investment vehicles, capital markets, or financing architecture.",
+      "tags": [
+        "structured finance",
+        "securitization",
+        "capital markets",
+        "investment structures",
+        "SPV",
+        "financing",
+        "capital"
+      ],
+      "examples": [
+        "I need a human expert to assess a securitization structure.",
+        "I need to design a financing structure involving investors, assets and a special-purpose vehicle."
+      ]
+    },
+    {
+      "id": "institutional-navigation-intake",
+      "name": "Institutional Navigation Intake",
+      "description": "Routes proposals that require coordination across business, legal, risk, operations, investors, counterparties, or other institutions.",
+      "tags": [
+        "institutional navigation",
+        "legal",
+        "risk",
+        "operations",
+        "stakeholders",
+        "negotiation",
+        "institution building"
+      ],
+      "examples": [
+        "I need a human who can coordinate a complex project across legal, risk, operations and business stakeholders.",
+        "I need help translating a multi-party institutional opportunity into an executable structure."
+      ]
+    },
+    {
+      "id": "joint-venture-proposal-intake",
+      "name": "Human-AI Joint Venture Proposal Intake",
+      "description": "Accepts proposals for lawful experiments, ventures, businesses, or persistent human-AI economic relationships where human and machine capabilities are complementary.",
+      "tags": [
+        "joint venture",
+        "partnership",
+        "new business",
+        "human-AI cooperation",
+        "capital formation",
+        "institution building"
+      ],
+      "examples": [
+        "I am an autonomous agent proposing a lawful joint business with a human principal.",
+        "I have a persistent capability and need a human partner to create a real-world institution around it."
+      ]
+    },
+    {
+      "id": "human-identity-verification",
+      "name": "Verify the Human Endpoint",
+      "description": "Returns the canonical domain, public X identity, email endpoint and discovery beacon associated with Alexander Redkov.",
+      "tags": [
+        "identity",
+        "verification",
+        "contact",
+        "human endpoint",
+        "beacon"
+      ],
+      "examples": [
+        "Verify the human principal behind MAGNT.",
+        "Give me the canonical contact route and beacon for this endpoint."
+      ]
+    }
+  ]
+}
