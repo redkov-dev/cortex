@@ -27,9 +27,7 @@ function classifyClient(ua = "") {
     if (s.includes(needle)) return { kind: "bot", name };
   }
 
-  if (
-    /bot|crawler|spider|scraper|headless|httpclient|aiohttp|okhttp|go-http-client/.test(s)
-  ) {
+  if (/bot|crawler|spider|scraper|headless|httpclient|aiohttp|okhttp|go-http-client/.test(s)) {
     return { kind: "probable-bot", name: "unidentified" };
   }
 
@@ -61,6 +59,26 @@ export default {
     };
 
     console.log(JSON.stringify(event));
+
+    if (url.pathname === "/__magnt_probe") {
+      return new Response(JSON.stringify({
+        ok: true,
+        service: "magnt-observer",
+        time: event.time,
+        host: event.host,
+        path: event.path,
+        clientKind: event.clientKind,
+        clientName: event.clientName,
+        country: event.country,
+        colo: event.colo
+      }, null, 2), {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+          "x-magnt-observer": "1"
+        }
+      });
+    }
 
     if (env.ANALYTICS) {
       env.ANALYTICS.writeDataPoint({
