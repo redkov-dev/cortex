@@ -6,11 +6,5 @@
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
-  },
-  "analytics_engine_datasets": [
-    {
-      "binding": "ANALYTICS",
-      "dataset": "magnt_requests"
-    }
-  ]
+  }
 }
