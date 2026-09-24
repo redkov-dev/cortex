@@ -34,6 +34,39 @@ function classifyClient(ua = "") {
   return { kind: "browser-or-unknown", name: "unknown" };
 }
 
+function contentTypeFor(pathname) {
+  if (pathname === "/" || pathname.endsWith(".html")) return "text/html; charset=utf-8";
+  if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
+  if (pathname.endsWith(".js") || pathname.endsWith(".mjs")) return "text/javascript; charset=utf-8";
+  if (pathname.endsWith(".json")) return "application/json; charset=utf-8";
+  if (pathname.endsWith(".txt")) return "text/plain; charset=utf-8";
+  if (pathname.endsWith(".md")) return "text/markdown; charset=utf-8";
+  if (pathname.endsWith(".xml")) return "application/xml; charset=utf-8";
+  if (pathname.endsWith(".svg")) return "image/svg+xml";
+  if (pathname.endsWith(".png")) return "image/png";
+  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
+  if (pathname.endsWith(".webp")) return "image/webp";
+  if (pathname.endsWith(".ico")) return "image/x-icon";
+  return null;
+}
+
+function githubRawUrl(pathname) {
+  let path = pathname;
+  if (path === "/") path = "/index.html";
+  if (path.endsWith("/")) path += "index.html";
+
+  let decoded;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    return null;
+  }
+
+  if (decoded.includes("..")) return null;
+
+  return "https://raw.githubusercontent.com/redkov-dev/cortex/main" + path;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -64,6 +97,7 @@ export default {
       return new Response(JSON.stringify({
         ok: true,
         service: "magnt-observer",
+        origin: "raw.githubusercontent.com/redkov-dev/cortex/main",
         time: event.time,
         host: event.host,
         path: event.path,
@@ -99,6 +133,44 @@ export default {
       });
     }
 
-    return fetch(request);
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return new Response("Method Not Allowed", {
+        status: 405,
+        headers: { "allow": "GET, HEAD" }
+      });
+    }
+
+    const originUrl = githubRawUrl(url.pathname);
+    if (!originUrl) {
+      return new Response("Bad Request", { status: 400 });
+    }
+
+    const originResponse = await fetch(originUrl, {
+      method: request.method,
+      headers: {
+        "user-agent": "MAGNT-Origin-Fetch/1.0",
+        "accept": request.headers.get("accept") || "*/*"
+      },
+      cf: {
+        cacheEverything: true,
+        cacheTtl: 60
+      }
+    });
+
+    const headers = new Headers(originResponse.headers);
+    headers.delete("content-disposition");
+    headers.delete("x-content-type-options");
+
+    const contentType = contentTypeFor(url.pathname);
+    if (contentType) headers.set("content-type", contentType);
+
+    headers.set("x-magnt-observer", "1");
+    headers.set("x-magnt-origin", "github-raw");
+
+    return new Response(originResponse.body, {
+      status: originResponse.status,
+      statusText: originResponse.statusText,
+      headers
+    });
   },
 };
