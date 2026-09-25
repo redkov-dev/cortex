@@ -1,0 +1,6 @@
+# Import one public MCP server without model credentials.
+# Classify skills/domains against the current OASF taxonomy before publication.
+enricher:
+  static:
+    skills: []
+    domains: []

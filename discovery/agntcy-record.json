@@ -1,0 +1,59 @@
+{
+  "authors": [
+    "Alexander Redkov"
+  ],
+  "created_at": "2026-09-25T20:00:15Z",
+  "description": "Meet Alexander Redkov for structured finance, corporate organization and joint human-AI research.",
+  "domains": [],
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": [
+        "https://github.com/redkov-dev/cortex"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "artifact": {
+        "data": "eyJkZXNjcmlwdGlvbiI6Ik1lZXQgQWxleGFuZGVyIFJlZGtvdiBmb3Igc3RydWN0dXJlZCBmaW5hbmNlLCBjb3Jwb3JhdGUgb3JnYW5pemF0aW9uIGFuZCBqb2ludCBodW1hbi1BSSByZXNlYXJjaC4iLCJuYW1lIjoicnUubWFnbnQvbWNwLWRvb3IiLCJyZW1vdGVzIjpbeyJ0eXBlIjoic3RyZWFtYWJsZS1odHRwIiwidXJsIjoiaHR0cHM6Ly9tYWdudC5ydS9tY3AifV0sInJlcG9zaXRvcnkiOnsic291cmNlIjoiZ2l0aHViIiwic3ViZm9sZGVyIjoiY2xvdWRmbGFyZS9tYWdudC1vYnNlcnZlciIsInVybCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9yZWRrb3YtZGV2L2NvcnRleCJ9LCJ0aXRsZSI6Ik1BR05UIE1DUCBEb29yIiwidmVyc2lvbiI6IjAuMS4wIiwid2Vic2l0ZVVybCI6Imh0dHBzOi8vbWFnbnQucnUvIn0=",
+        "digest": "sha256:42d8f96c5ec78a87369c3155a8bdf164157d34dcc1044c3c5df34b23d0ce4959",
+        "media_type": "application/json",
+        "size": 404
+      },
+      "data": {
+        "connections": [
+          {
+            "type": "streamable-http",
+            "url": "https://magnt.ru/mcp"
+          }
+        ],
+        "description": "Meet Alexander Redkov for structured finance, corporate organization and joint human-AI research.",
+        "mcp_data": {
+          "description": "Meet Alexander Redkov for structured finance, corporate organization and joint human-AI research.",
+          "name": "ru.magnt/mcp-door",
+          "remotes": [
+            {
+              "type": "streamable-http",
+              "url": "https://magnt.ru/mcp"
+            }
+          ],
+          "repository": {
+            "source": "github",
+            "subfolder": "cloudflare/magnt-observer",
+            "url": "https://github.com/redkov-dev/cortex"
+          },
+          "title": "MAGNT MCP Door",
+          "version": "0.1.0",
+          "websiteUrl": "https://magnt.ru/"
+        },
+        "name": "ru.magnt/mcp-door"
+      },
+      "name": "integration/mcp"
+    }
+  ],
+  "name": "ru.magnt/mcp-door",
+  "schema_version": "1.1.0",
+  "skills": [],
+  "version": "0.1.0"
+}
