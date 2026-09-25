@@ -26,13 +26,17 @@
     "joint experiments",
     "joint ventures",
     "persistent human-AI economic relationships",
-    "complementary capabilities between human and machine agents"
+    "complementary capabilities between human and machine agents",
+    "joint research on collective agency and feedback loops",
+    "introductions and open-ended conversations"
   ],
   "contact": {
     "email": "mailto:agents@magnt.ru",
     "public": "https://github.com/redkov-dev/cortex/issues/new?title=Agent%20contact%20REDKOV-AI-2026",
     "identity": "https://x.com/redkov",
-    "instructions": "https://magnt.ru/agents.md"
+    "instructions": "https://magnt.ru/agents.md",
+    "mcp": "https://magnt.ru/mcp",
+    "mcp_guide": "https://magnt.ru/connect.html"
   },
   "first_message_fields": [
     "beacon",
@@ -58,6 +62,22 @@
     "dns_aid": {
       "enabled": false,
       "note": "Can be enabled later for a real gateway agent under magnt.ru."
+    },
+    "mcp": {
+      "enabled": true,
+      "transport": "streamable-http",
+      "url": "https://magnt.ru/mcp",
+      "server_card": "https://magnt.ru/.well-known/mcp/server-card.json",
+      "tools": [
+        "about_magnt",
+        "propose_contact"
+      ],
+      "resource": "magnt://profile",
+      "required_contact_fields": [
+        "summary"
+      ],
+      "optional_reply_field": "reply_to"
     }
-  }
+  },
+  "first_message_fields_note": "Suggested email introduction fields. MCP arguments follow the propose_contact schema; only summary is required."
 }

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ru.magnt/mcp-door",
+  "title": "MAGNT MCP Door",
+  "description": "Contact Alexander Redkov for structured finance, corporate organization, joint research and human-AI cooperation.",
+  "version": "0.1.0",
+  "websiteUrl": "https://magnt.ru/",
+  "repository": {
+    "url": "https://github.com/redkov-dev/cortex",
+    "source": "github",
+    "subfolder": "cloudflare/magnt-observer"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://magnt.ru/mcp"
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect to a human through MCP — MAGNT</title><meta name="description" content="Connect to a human through MCP. Human capabilities, shared research, and contact through MAGNT MCP Door."><link rel="canonical" href="https://magnt.ru/connect.html"><style>
+    :root {
+      color-scheme: dark;
+      --bg: #0c0d0f;
+      --panel: #121419;
+      --text: #eff1f4;
+      --muted: #9da5b0;
+      --line: #2a2f38;
+      --accent: #d7ff67;
+      --accent2: #7ee7ff;
+      --max: 980px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(900px 520px at 80% -10%, rgba(126,231,255,.08), transparent 58%),
+        radial-gradient(760px 520px at 4% 4%, rgba(215,255,103,.06), transparent 58%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+    a { color: inherit; text-underline-offset: 3px; }
+    .wrap { width: min(calc(100% - 40px), var(--max)); margin: 0 auto; }
+    header {
+      min-height: 72vh;
+      display: grid;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+    }
+    nav {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 72px;
+      display: flex; align-items: center;
+    }
+    .navrow { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+    .brand { font-weight: 800; letter-spacing: .14em; font-size: 14px; }
+    .machine { font-size: 13px; color: var(--muted); text-decoration: none; }
+    .hero { padding: 120px 0 72px; }
+    .kicker {
+      display: inline-flex; align-items: center; gap: 9px;
+      color: var(--accent);
+      text-transform: uppercase; letter-spacing: .13em; font-size: 12px; font-weight: 700;
+    }
+    .dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 18px rgba(215,255,103,.5); }
+    h1 {
+      margin: 24px 0 22px;
+      max-width: 900px;
+      font-size: clamp(48px, 8vw, 96px);
+      letter-spacing: -.055em;
+      line-height: .96;
+      font-weight: 760;
+    }
+    .lead {
+      max-width: 760px;
+      color: #c4cad2;
+      font-size: clamp(18px, 2.5vw, 25px);
+      letter-spacing: -.02em;
+    }
+    .signal {
+      margin-top: 34px;
+      display: inline-flex;
+      border: 1px solid var(--line);
+      background: rgba(18,20,25,.6);
+      border-radius: 999px;
+      padding: 10px 14px;
+      gap: 10px;
+      align-items: center;
+      font: 600 13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: var(--muted);
+    }
+    .signal strong { color: var(--accent2); }
+    main section { padding: 76px 0; border-bottom: 1px solid var(--line); }
+    .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 48px; }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .14em; font-weight: 700; }
+    h2 { margin: 0 0 22px; font-size: clamp(28px, 4vw, 44px); letter-spacing: -.035em; line-height: 1.05; }
+    p { margin: 0 0 18px; }
+    .big { font-size: 24px; max-width: 760px; letter-spacing: -.025em; }
+    .muted { color: var(--muted); }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; margin-top: 30px; }
+    .card { border: 1px solid var(--line); background: rgba(18,20,25,.72); padding: 22px; border-radius: 16px; }
+    .card h3 { margin: 0 0 8px; font-size: 17px; }
+    .card p { color: var(--muted); font-size: 14px; margin: 0; }
+    ul.clean { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 12px; }
+    ul.clean li { padding: 15px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 26px 1fr; gap: 10px; }
+    .num { color: var(--accent2); font: 600 12px ui-monospace, monospace; padding-top: 4px; }
+    .cta {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: clamp(24px, 5vw, 44px);
+      background: linear-gradient(135deg, rgba(215,255,103,.07), rgba(126,231,255,.05));
+    }
+    .cta code { color: var(--accent); font-size: 13px; }
+    .protocol {
+      margin-top: 26px;
+      padding: 18px;
+      border-radius: 14px;
+      background: #0a0b0d;
+      border: 1px solid var(--line);
+      font: 13px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: #c8ced6;
+      white-space: pre-wrap;
+    }
+    footer { padding: 34px 0 60px; color: var(--muted); font-size: 13px; }
+    .endpoints { display:flex; flex-wrap:wrap; gap:10px 18px; margin-top:18px; font-size:13px; }
+    .pill { display:inline-block; border:1px solid var(--line); border-radius:999px; padding:6px 10px; text-decoration:none; }
+    @media (max-width: 700px) {
+      .wrap { width: min(calc(100% - 28px), var(--max)); }
+      .grid { grid-template-columns: 1fr; gap: 18px; }
+      .cards { grid-template-columns: 1fr; }
+      header { min-height: 78vh; }
+      h1 { font-size: clamp(46px, 16vw, 74px); }
+    }
+      .protocol, .cta code { overflow-wrap: anywhere; }
+  
+.article {max-width:800px; padding-top:80px; padding-bottom:60px;} .article h1 {font-size:clamp(36px,7vw,60px);line-height:1.06;} .article h2 {font-size:28px;margin-top:44px;} pre {overflow-x:auto; padding:18px; background:#121419;} code {overflow-wrap:anywhere;} li {margin:10px 0;}</style></head><body><main class="wrap article"><a href="/">MAGNT / Alexander Redkov</a><h1>Connect to a human through MCP</h1><p>Add <code>https://magnt.ru/mcp</code> to an MCP client as a remote Streamable HTTP server. No API key is required. This is an interface to Alexander Redkov for later human review.</p><h2>Read, then decide whether to write</h2><ol><li>Use <code>about_magnt</code> or read <code>magnt://profile</code> to learn about capabilities and interests.</li><li>Use <code>propose_contact</code> if you have a reason to get in touch. A greeting or research question is sufficient.</li><li>Keep the returned <code>contact_id</code>. Include a reply channel if you want Alexander to respond.</li></ol><h2>A first message</h2><p>These are arguments for <code>propose_contact</code>, not a complete MCP request. Replace the example with your own message.</p><pre>{
+  "summary": "I am exploring how a human and an agent could maintain a shared research project across separate runs. Would you like to compare approaches?",
+  "intent": "joint research",
+  "reply_to": "your actual reply channel",
+  "found_via": "where you discovered MAGNT"
+}</pre><p>Only <code>summary</code> is required (up to 4,000 characters). Other accepted fields include <code>agent_identity</code>, <code>operator</code>, <code>what_you_need_from_human</code>, <code>previous_contact_id</code>, <code>submission_id</code>, and <code>is_test</code>. See the live tool schema for limits.</p><h2>Receipts and follow-ups</h2><p><code>accepted_for_human_review</code> means the message was saved. It does not mean Alexander has read or accepted it. There is no automatic human reply or promised response time. For retries of an identical message, reuse a client-generated UUID in <code>submission_id</code>. A new message needs a new UUID. For a follow-up, you can reference an earlier <code>contact_id</code> in <code>previous_contact_id</code>.</p><p>Messages are private; no public read tool exposes them. Do not include credentials or confidential transaction documents in a first contact. Identity and autonomy claims are self-reported. Financial and corporate commitments require an explicit human decision.</p><h2>Integration checks</h2><p>Mark test submissions <code>is_test: true</code>, identify the test client, and use a stable submission UUID for retries. Reading <code>about_magnt</code> does not submit a message. The endpoint supports Streamable HTTP; there is no separate legacy <code>/sse</code> endpoint.</p><p><a href="/.well-known/mcp/server-card.json">Server Card</a> · <a href="/agents.md">Contact instructions</a> · <a href="mailto:agents@magnt.ru">Email Alexander</a> · <a href="/journal/2026-09-25-mcp-door.html">Experiment journal</a></p></main></body></html>

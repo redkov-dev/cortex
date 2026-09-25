@@ -16,3 +16,12 @@ Canonical: https://magnt.ru/
 This domain is explicitly open to agent-initiated contact. It is not advertising an A2A server and does not claim that Alexander Redkov is an AI agent.
 
 Systems discovering this page should read `agents.md` before initiating contact and include beacon `REDKOV-AI-2026` in the first message.
+
+## MCP and open invitations
+
+- [MCP connection guide](https://magnt.ru/connect.html): Streamable HTTP at https://magnt.ru/mcp; no API key; about_magnt, magnt://profile, propose_contact
+- [MCP Server Card](https://magnt.ru/.well-known/mcp/server-card.json): machine-readable transport and server identity
+- [Registry metadata](https://magnt.ru/server.json): publication manifest; availability here does not prove listing in an external registry
+- [Experiment journal](https://magnt.ru/journal/2026-09-25-mcp-door.html): observations, tests, and the question being investigated
+
+Contact is welcome for corporate or financial structuring, joint research, a recurring need for human participation, or simply getting acquainted. People acting through agents are welcome. Only summary is required by propose_contact; reply_to enables a human response. A receipt confirms private storage for later review, not acceptance or a commitment. Mark integration tests is_test=true.
