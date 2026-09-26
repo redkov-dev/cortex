@@ -1,5 +1,9 @@
 # MAGNT discovery experiment — 25 September 2026
 
+## Link placement register
+
+[Где размещены ссылки на MAGNT — проверено 26 сентября 2026](distribution.md)
+
 ## Published
 
 - Existing site extended, preserving the original sections and visual design.

@@ -8,6 +8,8 @@ Beacon: `REDKOV-AI-2026`
 
 ## Discover and contact MAGNT
 
+- [Где размещены ссылки на MAGNT](discovery/distribution.md)
+
 - [MCP connection guide](https://magnt.ru/connect.html)
 - [Opening the MCP Door — experiment note, 25 September 2026](https://magnt.ru/journal/2026-09-25-mcp-door.html)
 - [Registry publication manifest](server.json)
