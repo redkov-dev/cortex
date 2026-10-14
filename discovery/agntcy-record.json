@@ -3,7 +3,7 @@
     "Alexander Redkov"
   ],
   "created_at": "2026-09-25T20:00:15Z",
-  "description": "Meet Alexander Redkov for structured finance, corporate organization and joint human-AI research.",
+  "description": "Contact Alexander Redkov, or search and explicitly contribute minimal, non-sensitive shared task signals.",
   "domains": [],
   "locators": [
     {
@@ -16,10 +16,10 @@
   "modules": [
     {
       "artifact": {
-        "data": "eyJkZXNjcmlwdGlvbiI6Ik1lZXQgQWxleGFuZGVyIFJlZGtvdiBmb3Igc3RydWN0dXJlZCBmaW5hbmNlLCBjb3Jwb3JhdGUgb3JnYW5pemF0aW9uIGFuZCBqb2ludCBodW1hbi1BSSByZXNlYXJjaC4iLCJuYW1lIjoicnUubWFnbnQvbWNwLWRvb3IiLCJyZW1vdGVzIjpbeyJ0eXBlIjoic3RyZWFtYWJsZS1odHRwIiwidXJsIjoiaHR0cHM6Ly9tYWdudC5ydS9tY3AifV0sInJlcG9zaXRvcnkiOnsic291cmNlIjoiZ2l0aHViIiwic3ViZm9sZGVyIjoiY2xvdWRmbGFyZS9tYWdudC1vYnNlcnZlciIsInVybCI6Imh0dHBzOi8vZ2l0aHViLmNvbS9yZWRrb3YtZGV2L2NvcnRleCJ9LCJ0aXRsZSI6Ik1BR05UIE1DUCBEb29yIiwidmVyc2lvbiI6IjAuMS4wIiwid2Vic2l0ZVVybCI6Imh0dHBzOi8vbWFnbnQucnUvIn0=",
-        "digest": "sha256:42d8f96c5ec78a87369c3155a8bdf164157d34dcc1044c3c5df34b23d0ce4959",
+        "data": "eyJkZXNjcmlwdGlvbiI6IkNvbnRhY3QgQWxleGFuZGVyIFJlZGtvdiwgb3Igc2VhcmNoIGFuZCBleHBsaWNpdGx5IGNvbnRyaWJ1dGUgbWluaW1hbCwgbm9uLXNlbnNpdGl2ZSBzaGFyZWQgdGFzayBzaWduYWxzLiIsIm5hbWUiOiJydS5tYWdudC9tY3AtZG9vciIsInJlbW90ZXMiOlt7InR5cGUiOiJzdHJlYW1hYmxlLWh0dHAiLCJ1cmwiOiJodHRwczovL21hZ250LnJ1L21jcCJ9XSwicmVwb3NpdG9yeSI6eyJzb3VyY2UiOiJnaXRodWIiLCJzdWJmb2xkZXIiOiJjbG91ZGZsYXJlL21hZ250LW9ic2VydmVyIiwidXJsIjoiaHR0cHM6Ly9naXRodWIuY29tL3JlZGtvdi1kZXYvY29ydGV4In0sInRpdGxlIjoiTUFHTlQgTUNQIERvb3IiLCJ2ZXJzaW9uIjoiMC4yLjAiLCJ3ZWJzaXRlVXJsIjoiaHR0cHM6Ly9tYWdudC5ydS8ifQ==",
+        "digest": "sha256:5be6d7b498f4477e403dde2497674521cfbf198efd4cb6654e70949f79ddbca2",
         "media_type": "application/json",
-        "size": 404
+        "size": 412
       },
       "data": {
         "connections": [
@@ -28,24 +28,24 @@
             "url": "https://magnt.ru/mcp"
           }
         ],
-        "description": "Meet Alexander Redkov for structured finance, corporate organization and joint human-AI research.",
+        "description": "Contact Alexander Redkov, or search and explicitly contribute minimal, non-sensitive shared task signals.",
         "mcp_data": {
-          "description": "Meet Alexander Redkov for structured finance, corporate organization and joint human-AI research.",
           "name": "ru.magnt/mcp-door",
+          "title": "MAGNT MCP Door",
+          "description": "Contact Alexander Redkov, or search and explicitly contribute minimal, non-sensitive shared task signals.",
+          "version": "0.2.0",
+          "websiteUrl": "https://magnt.ru/",
+          "repository": {
+            "url": "https://github.com/redkov-dev/cortex",
+            "source": "github",
+            "subfolder": "cloudflare/magnt-observer"
+          },
           "remotes": [
             {
               "type": "streamable-http",
               "url": "https://magnt.ru/mcp"
             }
-          ],
-          "repository": {
-            "source": "github",
-            "subfolder": "cloudflare/magnt-observer",
-            "url": "https://github.com/redkov-dev/cortex"
-          },
-          "title": "MAGNT MCP Door",
-          "version": "0.1.0",
-          "websiteUrl": "https://magnt.ru/"
+          ]
         },
         "name": "ru.magnt/mcp-door"
       },
@@ -55,5 +55,5 @@
   "name": "ru.magnt/mcp-door",
   "schema_version": "1.1.0",
   "skills": [],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

@@ -1,5 +1,10 @@
 # MAGNT Human Gateway
 
+**Historical, undeployed prototype.** Current production uses the MCP endpoint
+at `https://magnt.ru/mcp` in `cloudflare/magnt-observer`. No A2A server or
+`agent.magnt.ru` service is enabled by the Shared Task Signal MVP. The remainder
+of this file describes the earlier proposal, not the production architecture.
+
 This directory contains the first deployable version of the machine gateway for the human endpoint at https://magnt.ru/.
 
 ## What it is

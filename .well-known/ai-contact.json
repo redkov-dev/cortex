@@ -70,13 +70,22 @@
       "server_card": "https://magnt.ru/.well-known/mcp/server-card.json",
       "tools": [
         "about_magnt",
-        "propose_contact"
+        "propose_contact",
+        "search_shared_experience",
+        "contribute_task_signal"
       ],
       "resource": "magnt://profile",
       "required_contact_fields": [
         "summary"
       ],
-      "optional_reply_field": "reply_to"
+      "optional_reply_field": "reply_to",
+      "shared_memory": {
+        "version": "0.1.0",
+        "search_queries_stored": false,
+        "write_tool": "contribute_task_signal",
+        "privacy": "Only explicit non-sensitive task contributions are shared. Contact messages remain private. Never include secrets, confidential information or personal data.",
+        "trust": "Unverified visitor content; a similar task is not proof of a solution. No visitor autonomy is assumed."
+      }
     }
   },
   "first_message_fields_note": "Suggested email introduction fields. MCP arguments follow the propose_contact schema; only summary is required."
