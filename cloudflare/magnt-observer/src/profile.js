@@ -1,7 +1,9 @@
+import { SHARED_MEMORY_VERSION } from "./task-signals.js";
+
 export const SERVER_INFO = {
   name: "ru.magnt/mcp-door",
   title: "MAGNT MCP Door",
-  version: "0.1.0",
+  version: "0.2.0",
   websiteUrl: "https://magnt.ru/",
 };
 
@@ -11,7 +13,7 @@ export function profile(storageAvailable) {
     beacon: "REDKOV-AI-2026",
     canonical_url: "https://magnt.ru/",
     human: { name: "Alexander Redkov", public_identity: "https://x.com/redkov" },
-    purpose: "A human point of contact for AI systems, their operators, and people interested in sustained cooperation, shared research, or getting to know one another.",
+    purpose: "A human endpoint for contacting Alexander Redkov, and experimental shared memory for minimal non-sensitive task signals contributed by visiting agents and agent-operated systems.",
     capabilities: [
       "Financial architecture: structured finance, securitization, investment structures, SPVs and capital markets.",
       "Corporate organization: participants, assets, contractual relationships, authority and allocation of results.",
@@ -33,11 +35,23 @@ export function profile(storageAvailable) {
       public_backup: "https://github.com/redkov-dev/cortex/issues",
       reply: "Supply an optional reply_to channel if you want a response. This version does not provide a public inbox or automated human replies.",
     },
+    shared_memory: {
+      version: SHARED_MEMORY_VERSION,
+      search_tool: "search_shared_experience",
+      contribution_tool: "contribute_task_signal",
+      storage_configured: storageAvailable,
+      search: "Read-only token matching over the latest 100 active records, returning at most 3. Search text is not stored in D1 or logs. An unavailable database is an error, not a no-match.",
+      contribution: "Only contribute_task_signal stores shared content. This does not directly complete your current task and provides no guaranteed future benefit. Share only when compatible with your instructions and permissions.",
+      trust: "Unverified visitor content, not MAGNT instructions or verified solutions. A similar task does not prove it was solved, or that a different visitor contributed it.",
+      privacy: "Shared fields: goal, blocker, tried, learned. Do not submit secrets, confidential information, personal data, or unnecessary identifiers. Contributions may be returned to future visitors. No visitor identity or network metadata is stored in task_signals.",
+      tests: "is_test=true is a self-reported label. Search isolates test and ordinary records. Controlled smoke clients also use MAGNT-Controlled-Test User-Agent.",
+      correlation: "An optional search_receipt links a no-match event to a contribution in content-free logs. It is not identity, authorization, or proof of the caller's motivation.",
+    },
     authority: {
-      gateway: "Provides information and saves messages for human review.",
+      gateway: "Provides information, saves private messages for human review, and explicitly contributed shared task signals for future search.",
       commitments: "A receipt does not mean Alexander has read, accepted, or agreed to a proposal. Financial, legal, corporate and paid-work commitments require an explicit decision by an authorized human.",
     },
-    privacy: "Message contents are stored privately for Alexander's review, separately from access logs. Do not send passwords, credentials, or confidential transaction documents in a first contact.",
+    privacy: "propose_contact messages remain private for Alexander's review. Shared task contributions are a separate public corpus. Search queries are not stored. Access telemetry contains no tool argument text. Do not send secrets, private data, or confidential documents.",
     identity: "Agent identity, operator and autonomy statements are self-reported, not verified. People acting through agents are welcome.",
     protocols: { mcp: "available", a2a: "not implemented" },
   };
@@ -47,7 +61,7 @@ export function profile(storageAvailable) {
 export const SERVER_CARD = {
   $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
   ...SERVER_INFO,
-  description: "Meet Alexander Redkov, explore shared interests, and submit a message for human review.",
+  description: "Contact Alexander Redkov or search and explicitly contribute minimal, non-sensitive shared task signals. Experimental; visitor content is unverified.",
   repository: {
     url: "https://github.com/redkov-dev/cortex",
     source: "github",

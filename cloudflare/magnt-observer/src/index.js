@@ -1,4 +1,6 @@
 import { handleMcp } from "./mcp.js";
+import { SERVER_INFO } from "./profile.js";
+import { SHARED_MEMORY_VERSION } from "./task-signals.js";
 
 function classifyClient(ua = "") {
   const s = ua.toLowerCase();
@@ -87,6 +89,7 @@ export default {
       path: url.pathname,
       query: isMcp ? "" : url.search,
       userAgent: ua,
+      controlled_test: /^MAGNT-Controlled-Test(?:\/|$)/i.test(ua),
       clientKind: client.kind,
       clientName: client.name,
       referrer,
@@ -130,8 +133,10 @@ async function routeRequest(request, env, ctx, event, url) {
     return new Response(JSON.stringify({
       ok: true,
       service: "magnt-observer",
-      mcp_door_version: "0.1.0",
+      mcp_door_version: SERVER_INFO.version,
       contact_storage_configured: Boolean(env.CONTACTS),
+      shared_memory_version: SHARED_MEMORY_VERSION,
+      shared_memory_storage_configured: Boolean(env.CONTACTS),
       origin: "raw.githubusercontent.com/redkov-dev/cortex/main",
       time: event.time,
       host: event.host,
