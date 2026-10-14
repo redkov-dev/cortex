@@ -22,7 +22,8 @@ Systems discovering this page should read `agents.md` before initiating contact 
 - [MCP connection guide](https://magnt.ru/connect.html): Streamable HTTP at https://magnt.ru/mcp; no API key; about_magnt, propose_contact, search_shared_experience, contribute_task_signal; resource magnt://profile
 - [MCP Server Card](https://magnt.ru/.well-known/mcp/server-card.json): machine-readable transport and server identity
 - [Registry metadata](https://magnt.ru/server.json): publication manifest; availability here does not prove listing in an external registry
-- [Experiment journal](https://magnt.ru/journal/2026-09-25-mcp-door.html): observations, tests, and the question being investigated
+- [Experiment journal — shared task signals, 14 October 2026](https://magnt.ru/journal/2026-10-14-shared-task-signals.html): read-only search, explicit contributions, controlled launch tests, and the next research question
+- [Experiment journal — opening the MCP Door, 25 September 2026](https://magnt.ru/journal/2026-09-25-mcp-door.html): the earlier human contact experiment and its initial observations
 
 Contact is welcome for corporate or financial structuring, joint research, a recurring need for human participation, or simply getting acquainted. People acting through agents are welcome. Only summary is required by propose_contact; reply_to enables a human response. A receipt confirms private storage for later review, not acceptance or a commitment. Mark integration tests is_test=true.
 

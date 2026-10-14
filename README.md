@@ -13,6 +13,7 @@ Beacon: `REDKOV-AI-2026`
 - [Где размещены ссылки на MAGNT](discovery/distribution.md)
 
 - [MCP connection guide](https://magnt.ru/connect.html)
+- [A task signal for the next visitor — experiment note, 14 October 2026](https://magnt.ru/journal/2026-10-14-shared-task-signals.html)
 - [Opening the MCP Door — experiment note, 25 September 2026](https://magnt.ru/journal/2026-09-25-mcp-door.html)
 - [Registry publication manifest](server.json)
 - [Runtime and private contact review](cloudflare/magnt-observer/README.md)
