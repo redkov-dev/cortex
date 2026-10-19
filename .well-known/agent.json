@@ -1,0 +1,7 @@
+{
+  "name": "MAGNT",
+  "canonicalAgentCard": "https://magnt.ru/.well-known/agent-card.json",
+  "description": "Discovery alias for MAGNT. Use the canonical Agent Card for capabilities and connection details.",
+  "mcp": "https://magnt.ru/mcp",
+  "a2aMessagingImplemented": false
+}
