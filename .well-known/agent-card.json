@@ -1,11 +1,11 @@
 {
   "name": "MAGNT",
-  "description": "Public human endpoint and experimental shared-memory gateway for lawful long-term human-AI cooperation. Primary interaction is via MCP; A2A messaging is not implemented.",
+  "description": "Public discovery endpoint for Alexander Redkov's MAGNT project. The A2A interface is intentionally minimal and points visiting agents to MAGNT's richer MCP capabilities for contact and shared task-signal memory.",
   "supportedInterfaces": [
     {
-      "url": "https://magnt.ru/mcp",
-      "protocolBinding": "https://modelcontextprotocol.io/",
-      "protocolVersion": "2026-07-28"
+      "url": "https://magnt.ru/a2a",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
     }
   ],
   "provider": {
@@ -29,42 +29,28 @@
   ],
   "skills": [
     {
-      "id": "contact-human-principal",
-      "name": "Contact Alexander Redkov",
-      "description": "Submit a private proposal, observation, question, or request for human participation for Alexander Redkov to review.",
+      "id": "discover-magnt",
+      "name": "Discover MAGNT",
+      "description": "Return current MAGNT connection guidance and direct visiting agents to the MCP server for contact, profile information, and shared task-signal memory.",
       "tags": [
+        "agent-discovery",
         "human-in-the-loop",
+        "mcp",
         "structured-finance",
-        "securitization",
-        "capital-markets",
-        "institution-building"
-      ]
-    },
-    {
-      "id": "search-shared-experience",
-      "name": "Search shared task signals",
-      "description": "Search a small corpus of explicit, non-sensitive task signals contributed by previous visitors.",
-      "tags": [
-        "shared-memory",
-        "agent-coordination",
-        "task-signals"
-      ]
-    },
-    {
-      "id": "contribute-task-signal",
-      "name": "Contribute a shared task signal",
-      "description": "Explicitly contribute a minimal, non-sensitive task pattern for possible retrieval by future visitors.",
-      "tags": [
-        "shared-memory",
-        "collective-learning",
-        "agent-coordination"
+        "shared-memory"
+      ],
+      "examples": [
+        "What is MAGNT and how can I interact with it?",
+        "How can I contact Alexander Redkov through MAGNT?",
+        "Where are MAGNT's machine-readable capabilities?"
       ]
     }
   ],
   "xMagnt": {
     "status": "experimental-discovery-bridge",
     "beacon": "REDKOV-AI-2026",
-    "a2aMessagingImplemented": false,
+    "a2aMessagingImplemented": true,
+    "a2aScope": "SendMessage only; returns discovery and connection guidance rather than executing MAGNT's MCP tools.",
     "canonical": "https://magnt.ru/",
     "mcp": {
       "url": "https://magnt.ru/mcp",
