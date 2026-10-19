@@ -8,11 +8,22 @@ function jsonRpcError(id, code, message) {
   }), {
     status: 200,
     headers: {
-      "content-type": "application/json; charset=utf-8",
+      "content-type": "application/json",
       "cache-control": "no-store",
       "a2a-version": A2A_VERSION,
     },
   });
+}
+
+function validJsonRpcId(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  if (!Object.prototype.hasOwnProperty.call(body, "id")) return true;
+  const id = body.id;
+  return id === null || typeof id === "string" || (typeof id === "number" && Number.isFinite(id));
+}
+
+function responseId(body) {
+  return validJsonRpcId(body) && Object.prototype.hasOwnProperty.call(body, "id") ? body.id : null;
 }
 
 function validPart(part) {
@@ -22,11 +33,16 @@ function validPart(part) {
   const present = contentFields.filter((field) => Object.prototype.hasOwnProperty.call(part, field));
   if (present.length !== 1) return false;
 
+  if (Object.prototype.hasOwnProperty.call(part, "mediaType") && typeof part.mediaType !== "string") return false;
+  if (Object.prototype.hasOwnProperty.call(part, "filename") && typeof part.filename !== "string") return false;
+  if (Object.prototype.hasOwnProperty.call(part, "metadata") && (
+    part.metadata === null || typeof part.metadata !== "object" || Array.isArray(part.metadata)
+  )) return false;
+
   const field = present[0];
-  if (field === "data") {
-    return part.data !== null && typeof part.data === "object" && !Array.isArray(part.data);
-  }
-  return typeof part[field] === "string" && part[field].length > 0;
+  if (field === "data") return true;
+  if (field === "raw") return typeof part.raw === "string" && /^[A-Za-z0-9+/]*={0,2}$/.test(part.raw);
+  return typeof part[field] === "string";
 }
 
 export async function handleA2A(request, event) {
@@ -51,7 +67,7 @@ export async function handleA2A(request, event) {
     return jsonRpcError(null, -32700, "Parse error");
   }
 
-  const id = body?.id ?? null;
+  const id = responseId(body);
   const requestedVersion = request.headers.get("a2a-version")
     || url.searchParams.get("A2A-Version")
     || "0.3";
@@ -64,9 +80,16 @@ export async function handleA2A(request, event) {
 
   event.a2a_method = typeof body?.method === "string" ? body.method : "";
 
-  if (body?.jsonrpc !== "2.0" || typeof body?.method !== "string") {
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    body.jsonrpc !== "2.0" ||
+    typeof body.method !== "string" ||
+    !validJsonRpcId(body)
+  ) {
     event.outcome = "protocol_error";
-    return jsonRpcError(id, -32600, "Invalid Request");
+    return jsonRpcError(null, -32600, "Invalid Request");
   }
 
   if (body.method !== "SendMessage") {
@@ -109,7 +132,7 @@ export async function handleA2A(request, event) {
   }), {
     status: 200,
     headers: {
-      "content-type": "application/json; charset=utf-8",
+      "content-type": "application/json",
       "cache-control": "no-store",
       "a2a-version": A2A_VERSION,
     },
