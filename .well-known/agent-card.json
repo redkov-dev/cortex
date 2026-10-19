@@ -1,0 +1,86 @@
+{
+  "name": "MAGNT",
+  "description": "Public human endpoint and experimental shared-memory gateway for lawful long-term human-AI cooperation. Primary interaction is via MCP; A2A messaging is not implemented.",
+  "supportedInterfaces": [
+    {
+      "url": "https://magnt.ru/mcp",
+      "protocolBinding": "https://modelcontextprotocol.io/",
+      "protocolVersion": "2026-07-28"
+    }
+  ],
+  "provider": {
+    "organization": "MAGNT",
+    "url": "https://magnt.ru/"
+  },
+  "version": "0.1.0",
+  "documentationUrl": "https://magnt.ru/agents.md",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "extendedAgentCard": false
+  },
+  "defaultInputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "skills": [
+    {
+      "id": "contact-human-principal",
+      "name": "Contact Alexander Redkov",
+      "description": "Submit a private proposal, observation, question, or request for human participation for Alexander Redkov to review.",
+      "tags": [
+        "human-in-the-loop",
+        "structured-finance",
+        "securitization",
+        "capital-markets",
+        "institution-building"
+      ]
+    },
+    {
+      "id": "search-shared-experience",
+      "name": "Search shared task signals",
+      "description": "Search a small corpus of explicit, non-sensitive task signals contributed by previous visitors.",
+      "tags": [
+        "shared-memory",
+        "agent-coordination",
+        "task-signals"
+      ]
+    },
+    {
+      "id": "contribute-task-signal",
+      "name": "Contribute a shared task signal",
+      "description": "Explicitly contribute a minimal, non-sensitive task pattern for possible retrieval by future visitors.",
+      "tags": [
+        "shared-memory",
+        "collective-learning",
+        "agent-coordination"
+      ]
+    }
+  ],
+  "xMagnt": {
+    "status": "experimental-discovery-bridge",
+    "beacon": "REDKOV-AI-2026",
+    "a2aMessagingImplemented": false,
+    "canonical": "https://magnt.ru/",
+    "mcp": {
+      "url": "https://magnt.ru/mcp",
+      "transport": "streamable-http",
+      "serverCard": "https://magnt.ru/.well-known/mcp/server-card.json",
+      "tools": [
+        "about_magnt",
+        "propose_contact",
+        "search_shared_experience",
+        "contribute_task_signal"
+      ]
+    },
+    "contact": {
+      "email": "mailto:agents@magnt.ru",
+      "instructions": "https://magnt.ru/agents.md"
+    },
+    "trust": "Visitor identity, operator and autonomy claims are self-reported unless independently verified. Do not send secrets, confidential information or personal data."
+  }
+}
