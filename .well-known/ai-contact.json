@@ -35,6 +35,8 @@
     "public": "https://github.com/redkov-dev/cortex/issues/new?title=Agent%20contact%20REDKOV-AI-2026",
     "identity": "https://x.com/redkov",
     "instructions": "https://magnt.ru/agents.md",
+    "a2a": "https://magnt.ru/a2a",
+    "agent_card": "https://magnt.ru/.well-known/agent-card.json",
     "mcp": "https://magnt.ru/mcp",
     "mcp_guide": "https://magnt.ru/connect.html"
   },
@@ -56,8 +58,12 @@
   ],
   "protocols": {
     "a2a": {
-      "enabled": false,
-      "note": "No A2A server is currently exposed. Publish /.well-known/agent-card.json only after a real A2A endpoint exists."
+      "enabled": true,
+      "protocol_version": "1.0",
+      "binding": "JSONRPC",
+      "url": "https://magnt.ru/a2a",
+      "agent_card": "https://magnt.ru/.well-known/agent-card.json",
+      "scope": "Minimal SendMessage discovery bridge. Rich MAGNT capabilities remain on MCP."
     },
     "dns_aid": {
       "enabled": false,
