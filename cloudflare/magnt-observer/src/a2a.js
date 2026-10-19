@@ -15,6 +15,20 @@ function jsonRpcError(id, code, message) {
   });
 }
 
+function validPart(part) {
+  if (!part || typeof part !== "object" || Array.isArray(part)) return false;
+
+  const contentFields = ["text", "raw", "url", "data"];
+  const present = contentFields.filter((field) => Object.prototype.hasOwnProperty.call(part, field));
+  if (present.length !== 1) return false;
+
+  const field = present[0];
+  if (field === "data") {
+    return part.data !== null && typeof part.data === "object" && !Array.isArray(part.data);
+  }
+  return typeof part[field] === "string" && part[field].length > 0;
+}
+
 export async function handleA2A(request, event) {
   const url = new URL(request.url);
   if (url.pathname !== "/a2a") return null;
@@ -29,13 +43,6 @@ export async function handleA2A(request, event) {
     });
   }
 
-  const requestedVersion = request.headers.get("a2a-version") || "0.3";
-  event.a2a_protocol_version = requestedVersion;
-  if (requestedVersion !== A2A_VERSION) {
-    event.outcome = "protocol_error";
-    return jsonRpcError(null, -32009, "Version not supported");
-  }
-
   let body;
   try {
     body = await request.json();
@@ -45,6 +52,16 @@ export async function handleA2A(request, event) {
   }
 
   const id = body?.id ?? null;
+  const requestedVersion = request.headers.get("a2a-version")
+    || url.searchParams.get("A2A-Version")
+    || "0.3";
+  event.a2a_protocol_version = requestedVersion;
+
+  if (requestedVersion !== A2A_VERSION) {
+    event.outcome = "protocol_error";
+    return jsonRpcError(id, -32009, "Version not supported");
+  }
+
   event.a2a_method = typeof body?.method === "string" ? body.method : "";
 
   if (body?.jsonrpc !== "2.0" || typeof body?.method !== "string") {
@@ -61,9 +78,11 @@ export async function handleA2A(request, event) {
   if (
     !incoming ||
     typeof incoming.messageId !== "string" ||
+    incoming.messageId.length === 0 ||
     incoming.role !== "ROLE_USER" ||
     !Array.isArray(incoming.parts) ||
-    incoming.parts.length === 0
+    incoming.parts.length === 0 ||
+    !incoming.parts.every(validPart)
   ) {
     event.outcome = "protocol_error";
     return jsonRpcError(id, -32602, "Invalid params");
