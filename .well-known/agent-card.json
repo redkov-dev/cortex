@@ -45,28 +45,5 @@
         "Where are MAGNT's machine-readable capabilities?"
       ]
     }
-  ],
-  "xMagnt": {
-    "status": "experimental-discovery-bridge",
-    "beacon": "REDKOV-AI-2026",
-    "a2aMessagingImplemented": true,
-    "a2aScope": "SendMessage only; returns discovery and connection guidance rather than executing MAGNT's MCP tools.",
-    "canonical": "https://magnt.ru/",
-    "mcp": {
-      "url": "https://magnt.ru/mcp",
-      "transport": "streamable-http",
-      "serverCard": "https://magnt.ru/.well-known/mcp/server-card.json",
-      "tools": [
-        "about_magnt",
-        "propose_contact",
-        "search_shared_experience",
-        "contribute_task_signal"
-      ]
-    },
-    "contact": {
-      "email": "mailto:agents@magnt.ru",
-      "instructions": "https://magnt.ru/agents.md"
-    },
-    "trust": "Visitor identity, operator and autonomy claims are self-reported unless independently verified. Do not send secrets, confidential information or personal data."
-  }
+  ]
 }
