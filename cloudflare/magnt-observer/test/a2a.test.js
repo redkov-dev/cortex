@@ -62,6 +62,32 @@ test("A2A preserves an incoming contextId", async () => {
   assert.equal(body.result.message.contextId, "ctx-1");
 });
 
+test("A2A accepts the v1 version as a query parameter", async () => {
+  const event = {};
+  const request = new Request("https://magnt.ru/a2a?A2A-Version=1.0", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "query-version",
+      method: "SendMessage",
+      params: {
+        message: {
+          messageId: "m-query",
+          role: "ROLE_USER",
+          parts: [{ text: "Hello" }],
+        },
+      },
+    }),
+  });
+
+  const response = await handleA2A(request, event);
+  const body = await response.json();
+  assert.equal(body.id, "query-version");
+  assert.ok(body.result?.message);
+  assert.equal(event.a2a_protocol_version, "1.0");
+});
+
 test("A2A rejects unsupported methods without exposing request content", async () => {
   const event = {};
   const request = new Request("https://magnt.ru/a2a", {
@@ -77,7 +103,7 @@ test("A2A rejects unsupported methods without exposing request content", async (
   assert.equal(event.outcome, "protocol_error");
 });
 
-test("A2A rejects an unsupported protocol version", async () => {
+test("A2A rejects an unsupported protocol version and preserves request id", async () => {
   const event = {};
   const request = new Request("https://magnt.ru/a2a", {
     method: "POST",
@@ -98,7 +124,35 @@ test("A2A rejects an unsupported protocol version", async () => {
 
   const response = await handleA2A(request, event);
   const body = await response.json();
+  assert.equal(body.id, 4);
   assert.equal(body.error.code, -32009);
   assert.equal(event.a2a_protocol_version, "9.9");
   assert.equal(event.outcome, "protocol_error");
+});
+
+test("A2A rejects malformed message parts", async () => {
+  for (const badPart of [null, {}, { text: "", url: "https://example.com" }]) {
+    const event = {};
+    const request = new Request("https://magnt.ru/a2a", {
+      method: "POST",
+      headers: { "content-type": "application/json", "a2a-version": "1.0" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "bad-part",
+        method: "SendMessage",
+        params: {
+          message: {
+            messageId: "m-bad",
+            role: "ROLE_USER",
+            parts: [badPart],
+          },
+        },
+      }),
+    });
+
+    const response = await handleA2A(request, event);
+    const body = await response.json();
+    assert.equal(body.error.code, -32602);
+    assert.equal(event.outcome, "protocol_error");
+  }
 });
