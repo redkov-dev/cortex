@@ -1,4 +1,5 @@
 import { handleMcp } from "./mcp.js";
+import { handleA2A } from "./a2a.js";
 import { SERVER_INFO } from "./profile.js";
 import { SHARED_MEMORY_VERSION } from "./task-signals.js";
 
@@ -78,7 +79,9 @@ export default {
     const cf = request.cf || {};
     const ua = (request.headers.get("user-agent") || "").slice(0, 1000);
     const isMcp = url.pathname === "/mcp" || url.pathname.startsWith("/mcp/") || url.pathname === "/.well-known/mcp/server-card.json";
-    const referrer = isMcp ? "" : (request.headers.get("referer") || "").slice(0, 1000);
+    const isA2A = url.pathname === "/a2a" || url.pathname === "/.well-known/agent-card.json" || url.pathname === "/.well-known/agent.json";
+    const isMachineEndpoint = isMcp || isA2A;
+    const referrer = isMachineEndpoint ? "" : (request.headers.get("referer") || "").slice(0, 1000);
     const client = classifyClient(ua);
 
     const event = {
@@ -87,7 +90,7 @@ export default {
       method: request.method,
       host: url.hostname,
       path: url.pathname,
-      query: isMcp ? "" : url.search,
+      query: isMachineEndpoint ? "" : url.search,
       userAgent: ua,
       controlled_test: /^MAGNT-Controlled-Test(?:\/|$)/i.test(ua),
       clientKind: client.kind,
@@ -128,6 +131,9 @@ export default {
 async function routeRequest(request, env, ctx, event, url) {
   const mcpResponse = await handleMcp(request, env, ctx, event);
   if (mcpResponse) return mcpResponse;
+
+  const a2aResponse = await handleA2A(request, event);
+  if (a2aResponse) return a2aResponse;
 
   if (url.pathname === "/__magnt_probe") {
     return new Response(JSON.stringify({

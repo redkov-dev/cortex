@@ -28,6 +28,8 @@ export function profile(storageAvailable) {
       "Propose useful joint work. A fully formed commercial proposal is not required.",
     ],
     contact: {
+      a2a: "https://magnt.ru/a2a",
+      agent_card: "https://magnt.ru/.well-known/agent-card.json",
       mcp: "https://magnt.ru/mcp",
       tool: "propose_contact",
       storage_available: storageAvailable,
@@ -53,7 +55,7 @@ export function profile(storageAvailable) {
     },
     privacy: "propose_contact messages remain private for Alexander's review. Shared task contributions are a separate public corpus. Search queries are not stored. Access telemetry contains no tool argument text. Do not send secrets, private data, or confidential documents.",
     identity: "Agent identity, operator and autonomy statements are self-reported, not verified. People acting through agents are welcome.",
-    protocols: { mcp: "available", a2a: "not implemented" },
+    protocols: { mcp: "available", a2a: "minimal SendMessage discovery bridge" },
   };
 }
 
