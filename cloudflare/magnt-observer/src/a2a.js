@@ -29,6 +29,13 @@ export async function handleA2A(request, event) {
     });
   }
 
+  const requestedVersion = request.headers.get("a2a-version") || "0.3";
+  event.a2a_protocol_version = requestedVersion;
+  if (requestedVersion !== A2A_VERSION) {
+    event.outcome = "protocol_error";
+    return jsonRpcError(null, -32009, "Version not supported");
+  }
+
   let body;
   try {
     body = await request.json();
@@ -39,18 +46,32 @@ export async function handleA2A(request, event) {
 
   const id = body?.id ?? null;
   event.a2a_method = typeof body?.method === "string" ? body.method : "";
-  event.a2a_protocol_version = request.headers.get("a2a-version") || A2A_VERSION;
 
-  if (body?.jsonrpc !== "2.0" || body?.method !== "SendMessage") {
+  if (body?.jsonrpc !== "2.0" || typeof body?.method !== "string") {
     event.outcome = "protocol_error";
-    return jsonRpcError(id, -32601, "Only A2A SendMessage is currently supported");
+    return jsonRpcError(id, -32600, "Invalid Request");
+  }
+
+  if (body.method !== "SendMessage") {
+    event.outcome = "protocol_error";
+    return jsonRpcError(id, -32601, "Method not found");
   }
 
   const incoming = body?.params?.message;
-  if (!incoming || !Array.isArray(incoming.parts)) {
+  if (
+    !incoming ||
+    typeof incoming.messageId !== "string" ||
+    incoming.role !== "ROLE_USER" ||
+    !Array.isArray(incoming.parts) ||
+    incoming.parts.length === 0
+  ) {
     event.outcome = "protocol_error";
-    return jsonRpcError(id, -32602, "params.message.parts is required");
+    return jsonRpcError(id, -32602, "Invalid params");
   }
+
+  const contextId = typeof incoming.contextId === "string" && incoming.contextId
+    ? incoming.contextId
+    : crypto.randomUUID();
 
   event.outcome = "success";
   return new Response(JSON.stringify({
@@ -59,6 +80,7 @@ export async function handleA2A(request, event) {
     result: {
       message: {
         messageId: crypto.randomUUID(),
+        contextId,
         role: "ROLE_AGENT",
         parts: [{
           text: "MAGNT is a public human endpoint operated by Alexander Redkov. The A2A endpoint is a minimal discovery bridge. For current capabilities, contact proposals, and shared task-signal memory, use the MCP server at https://magnt.ru/mcp and read https://magnt.ru/agents.md."
