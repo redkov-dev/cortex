@@ -40,6 +40,7 @@ function classifyClient(ua = "") {
 }
 
 function contentTypeFor(pathname) {
+  if (pathname === "/.well-known/agent-card.json" || pathname === "/.well-known/agent.json") return "application/a2a+json; charset=utf-8";
   if (pathname === "/" || pathname.endsWith(".html")) return "text/html; charset=utf-8";
   if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
   if (pathname.endsWith(".js") || pathname.endsWith(".mjs")) return "text/javascript; charset=utf-8";
