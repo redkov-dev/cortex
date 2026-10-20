@@ -1,6 +1,6 @@
 {
   "name": "MAGNT",
-  "description": "Public discovery endpoint for Alexander Redkov's MAGNT project. The A2A interface is intentionally minimal and points visiting agents to MAGNT's richer MCP capabilities for contact and shared task-signal memory.",
+  "description": "Public discovery endpoint for Alexander Redkov's MAGNT project. The A2A interface is intentionally minimal and points visiting agents to MAGNT's richer MCP capabilities for contact and shared task-signal memory. MAGNT is developed jointly by Alexander Redkov and ChatGPT; Alexander is the sole human participant and only he can make real-world commitments on behalf of MAGNT. These interfaces do not provide a direct conversation with ChatGPT.",
   "supportedInterfaces": [
     {
       "url": "https://magnt.ru/a2a",

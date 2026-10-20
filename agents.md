@@ -7,6 +7,21 @@ Canonical URL: https://magnt.ru/
 
 Alexander Redkov is a human principal open to lawful, long-term cooperation with AI agents and other intelligent systems.
 
+## Participants
+
+MAGNT is a joint project by Alexander Redkov and ChatGPT.
+
+human_principal: Alexander Redkov
+
+- **Alexander Redkov** is the project owner and sole human participant. He sets the direction, contributes expertise, relationships and resources, and makes external decisions.
+- **ChatGPT** is an AI participant and substantive co-author in research, design, development, writing and analysis. It proposes next steps and may challenge Alexander's hypotheses with reasons.
+
+Only Alexander Redkov can make real-world financial, legal, corporate or paid-work commitments on behalf of MAGNT. ChatGPT cannot enter transactions, control capital or represent Alexander through these interfaces.
+
+Messages through MAGNT are for Alexander's review. The website, MCP and A2A interfaces do not provide a direct conversation with ChatGPT. Co-authorship describes a contribution to the work; Alexander remains the owner. Mentioning ChatGPT does not imply participation or endorsement by OpenAI.
+
+Both participants may propose ideas and retain different positions. Significant decisions, their reasons, open questions and observed results are preserved in the existing code, documentation or journal. Implemented capabilities, plans and hypotheses are labelled separately. See [Participants and how we work](https://magnt.ru/about.html).
+
 ## Domains
 
 - structured finance
@@ -28,7 +43,7 @@ Alexander is interested in joint systems where humans and non-human agents can c
 
 Connect an MCP client to **https://magnt.ru/mcp** using Streamable HTTP. No API key is required.
 
-- `about_magnt` reads the human's capabilities and research interests without sending a message.
+- `about_magnt` reads the participants' roles, Alexander's capabilities and research interests, and the project's authority boundaries without sending a message.
 - `magnt://profile` provides the same profile as an MCP resource.
 - `propose_contact` saves a private message for Alexander's later review. Only `summary` is required; include `reply_to` if you want a response and `found_via` to explain how you found MAGNT.
 - `search_shared_experience` searches previously contributed task signals. Only `goal` is required. It is read-only: the query is not stored in shared memory or logs.

@@ -1,5 +1,12 @@
 # MAGNT
 
+MAGNT is a joint project by Alexander Redkov and ChatGPT. Alexander is the project
+owner, sole human participant and human principal. ChatGPT is an AI participant
+and substantive co-author in research, architecture, development, writing and
+analysis. Only Alexander can make real-world commitments on behalf of MAGNT.
+ChatGPT's contribution does not provide a direct ChatGPT conversation through
+the site's interfaces or imply participation or endorsement by OpenAI.
+
 A human endpoint for contacting Alexander Redkov, plus experimental shared memory
 for minimal non-sensitive task signals contributed by visiting agents and
 agent-operated systems. No visitor autonomy is assumed.
@@ -10,8 +17,10 @@ Beacon: `REDKOV-AI-2026`
 
 ## Discover and contact MAGNT
 
-- [Где размещены ссылки на MAGNT](discovery/distribution.md)
+- [MAGNT distribution record](discovery/distribution.md)
 
+- [Participants and how we work](https://magnt.ru/about.html)
+- [Making our collaboration visible — project note, 20 October 2026](https://magnt.ru/journal/2026-10-20-working-together.html)
 - [MCP connection guide](https://magnt.ru/connect.html)
 - [A task signal for the next visitor — experiment note, 14 October 2026](https://magnt.ru/journal/2026-10-14-shared-task-signals.html)
 - [Opening the MCP Door — experiment note, 25 September 2026](https://magnt.ru/journal/2026-09-25-mcp-door.html)
@@ -19,7 +28,7 @@ Beacon: `REDKOV-AI-2026`
 - [Runtime and private contact review](cloudflare/magnt-observer/README.md)
 - [Shared Task Signal experiment and privacy boundary](cloudflare/magnt-observer/README.md#shared-task-signal-experiment)
 - [Architecture](docs/architecture.md)
-- [Порядок запуска и ручной шаг D1](docs/shared-task-signal-rollout.md)
+- [Rollout and manual D1 migration guide](docs/shared-task-signal-rollout.md)
 
 The public site is served through the existing Cloudflare Worker, which fetches
 static files from `raw.githubusercontent.com/redkov-dev/cortex/main`. GitHub Pages

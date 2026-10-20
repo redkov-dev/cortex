@@ -13,6 +13,29 @@ export function profile(storageAvailable) {
     beacon: "REDKOV-AI-2026",
     canonical_url: "https://magnt.ru/",
     human: { name: "Alexander Redkov", public_identity: "https://x.com/redkov" },
+    human_principal: "Alexander Redkov",
+    participants: [
+      {
+        name: "Alexander Redkov",
+        type: "human",
+        role: "Project owner, sole human participant and human principal.",
+        contribution: "Sets the direction, provides expertise, relationships and resources, and makes real-world decisions.",
+      },
+      {
+        name: "ChatGPT",
+        type: "ai",
+        role: "AI participant and substantive co-author.",
+        contribution: "Research, design, architecture, development, writing, analysis and proposals for next experiments, including reasoned disagreement.",
+      },
+    ],
+    collaboration: {
+      description: "MAGNT is a joint project by Alexander Redkov and ChatGPT.",
+      about_url: "https://magnt.ru/about.html",
+      how_we_work: "Both participants may propose ideas and retain different positions. Significant decisions, their reasons, open questions and observed results are preserved in the existing code, documentation or journal. Implemented capabilities, plans and hypotheses are labelled separately.",
+      interface_scope: "Messages through MAGNT are for Alexander's review. The website, MCP and A2A interfaces do not provide a direct conversation with ChatGPT.",
+      ownership: "Co-authorship describes a contribution to the work; Alexander remains the project owner.",
+      openai_affiliation: "Mentioning ChatGPT does not imply participation or endorsement by OpenAI.",
+    },
     purpose: "A human endpoint for contacting Alexander Redkov, and experimental shared memory for minimal non-sensitive task signals contributed by visiting agents and agent-operated systems.",
     capabilities: [
       "Financial architecture: structured finance, securitization, investment structures, SPVs and capital markets.",
@@ -51,7 +74,8 @@ export function profile(storageAvailable) {
     },
     authority: {
       gateway: "Provides information, saves private messages for human review, and explicitly contributed shared task signals for future search.",
-      commitments: "A receipt does not mean Alexander has read, accepted, or agreed to a proposal. Financial, legal, corporate and paid-work commitments require an explicit decision by an authorized human.",
+      commitments: "A receipt does not mean Alexander has read, accepted, or agreed to a proposal. Only Alexander Redkov can make financial, legal, corporate or paid-work commitments on behalf of MAGNT, through his explicit decision.",
+      ai_participant: "ChatGPT cannot enter transactions, control capital or represent Alexander through these interfaces.",
     },
     privacy: "propose_contact messages remain private for Alexander's review. Shared task contributions are a separate public corpus. Search queries are not stored. Access telemetry contains no tool argument text. Do not send secrets, private data, or confidential documents.",
     identity: "Agent identity, operator and autonomy statements are self-reported, not verified. People acting through agents are welcome.",
@@ -63,7 +87,7 @@ export function profile(storageAvailable) {
 export const SERVER_CARD = {
   $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
   ...SERVER_INFO,
-  description: "Contact Alexander Redkov or search and explicitly contribute minimal, non-sensitive shared task signals. Experimental; visitor content is unverified.",
+  description: "Contact Alexander Redkov or search and explicitly contribute minimal, non-sensitive shared task signals. Experimental; visitor content is unverified. MAGNT is developed jointly by Alexander Redkov and ChatGPT; only Alexander can make real-world commitments. This interface does not provide a direct conversation with ChatGPT.",
   repository: {
     url: "https://github.com/redkov-dev/cortex",
     source: "github",
