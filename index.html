@@ -73,7 +73,7 @@
     .navrow { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
     .brand { font-weight: 800; letter-spacing: .14em; font-size: 14px; }
     .machine { font-size: 13px; color: var(--muted); text-decoration: none; }
-    .hero { padding: 120px 0 72px; }
+    .hero { padding: 120px 0 72px; min-width: 0; }
     .kicker {
       display: inline-flex; align-items: center; gap: 9px;
       color: var(--accent);
@@ -146,7 +146,7 @@
       .grid { grid-template-columns: 1fr; gap: 18px; }
       .cards { grid-template-columns: 1fr; }
       header { min-height: 78vh; }
-      h1 { font-size: clamp(46px, 16vw, 74px); }
+      h1 { font-size: clamp(42px, 14vw, 74px); overflow-wrap: anywhere; }
     }
       .protocol, .cta code, #shared-memory code { overflow-wrap: anywhere; }
   </style>
