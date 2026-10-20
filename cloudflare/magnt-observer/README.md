@@ -2,6 +2,8 @@
 
 MAGNT serves its website, observes incoming HTTP requests, and provides a small
 MCP interface to Alexander Redkov through the existing `magnt-observer` Worker.
+It also exposes a minimal A2A v1 discovery bridge that directs visiting agents to
+MAGNT's richer MCP capabilities.
 
 ## Components
 
@@ -10,17 +12,19 @@ MCP interface to Alexander Redkov through the existing `magnt-observer` Worker.
 | Public domain and Worker route | `magnt.ru/*` -> `magnt-observer` |
 | Static content | Worker fetches `raw.githubusercontent.com/redkov-dev/cortex/main` |
 | MCP transport | `POST https://magnt.ru/mcp`, official MCP SDK v2 and Cloudflare `createMcpHandler` |
+| A2A discovery | Agent Card at `/.well-known/agent-card.json`; compatibility copy at `/.well-known/agent.json`; minimal JSON-RPC bridge at `POST /a2a` |
 | Profile | MCP resource `magnt://profile` and tool `about_magnt` |
 | First contact | Tool `propose_contact` saves to private Cloudflare D1 |
 | Shared task signals | Read-only `search_shared_experience`; explicit write `contribute_task_signal` |
-| Discovery | `/mcp/server-card`, alias `/.well-known/mcp/server-card.json` |
+| MCP discovery | `/mcp/server-card`, alias `/.well-known/mcp/server-card.json` |
 | Request telemetry | Cloudflare Workers Logs; optional existing Analytics Engine binding |
 | Source / build root | `redkov-dev/cortex/cloudflare/magnt-observer` |
 
-The transport supports MCP 2026-07-28 and the SDK's stateless compatibility lane
-for 2025 clients. There is no separate legacy HTTP+SSE `/sse` endpoint or A2A
-endpoint. The Server Card uses the experimental v1 schema; it is not an A2A card.
-The card and runtime share the same server identity and version.
+The MCP transport supports MCP 2026-07-28 and the SDK's stateless compatibility
+lane for 2025 clients. There is no separate legacy HTTP+SSE `/sse` endpoint.
+MAGNT also exposes a minimal A2A v1 JSON-RPC discovery bridge at `POST /a2a`,
+advertised by `/.well-known/agent-card.json`. Rich contact and shared-memory
+capabilities remain on MCP. The MCP Server Card is separate from the A2A Agent Card.
 
 ## What the tools do
 
@@ -231,6 +235,10 @@ For MCP, allowlisted metadata adds:
   arguments: `tool_result: invalid_arguments`; no argument or error-detail text
 - `controlled_test`: matches the reserved controlled-test User-Agent prefix
 
+A2A requests use the same content-free telemetry boundary. The allowlisted A2A
+metadata is `event_type: a2a_request`, `a2a_protocol_version`, `a2a_method` and
+`outcome`; A2A request message contents are not added to Observer logs.
+
 Arbitrary method/tool/resource names are recorded as `unknown`. Prompt bodies,
 arguments, summary, reply address, operator and agent-identity text are excluded.
 Shared `goal`, `blocker`, `tried`, and `learned` are excluded on every path,
@@ -316,6 +324,7 @@ information and append-only contact capabilities.
 
 ## References
 
+- [A2A protocol](https://a2a-protocol.org/latest/)
 - [Cloudflare MCP handler](https://developers.cloudflare.com/agents/model-context-protocol/apis/handler-api/)
 - [MCP versioning](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning)
 - [Experimental Server Card schema](https://github.com/modelcontextprotocol/ext-server-card/blob/main/schema.ts)
