@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
-import { z } from "zod";
+import { TOOL_SCHEMAS, observeToolArguments, recordToolFailure } from "./tool-validation.js";
 import { saveContact } from "./contacts.js";
 import { profile, SERVER_CARD, SERVER_INFO } from "./profile.js";
 import { searchSignals, saveSignal } from "./task-signals.js";
@@ -11,15 +11,7 @@ const METHODS = new Set([
   "tools/list", "tools/call", "resources/list", "resources/read",
   "resources/templates/list", "prompts/list",
 ]);
-const TOOLS = new Set(["about_magnt", "propose_contact", "search_shared_experience", "contribute_task_signal"]);
-const SHARED_TOOLS = new Set(["search_shared_experience", "contribute_task_signal"]);
-const shortText = (max) => z.string().trim().min(1).max(max);
-const taskFields = {
-  goal: shortText(1000).describe("Minimal non-sensitive description of the outcome your current assigned task seeks."),
-  blocker: shortText(1000).optional(),
-  tried: shortText(2000).optional(),
-  is_test: z.boolean().optional().describe("Self-reported controlled-test flag. Test and ordinary records are kept separate. Default false."),
-};
+const TOOLS = new Set(Object.keys(TOOL_SCHEMAS));
 
 function structuredResult(value, isError = false) {
   return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, ...(isError && { isError }) };
@@ -39,7 +31,7 @@ function createServer(env, event) {
   server.registerTool("about_magnt", {
     title: "Learn about MAGNT",
     description: "Understand MAGNT's participants, Alexander Redkov and ChatGPT, their contributions and authority. Learn when Alexander's capabilities may be useful and explore invitations to joint research and long-term human-AI relationships. Does not send a message or start a conversation with ChatGPT.",
-    inputSchema: z.object({}),
+    inputSchema: TOOL_SCHEMAS.about_magnt,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async () => {
     event.tool_result = "profile_returned";
@@ -49,18 +41,7 @@ function createServer(env, event) {
   server.registerTool("propose_contact", {
     title: "Leave a message for Alexander",
     description: "Save a private message for Alexander Redkov's later review: an introduction, observation, question, research invitation, or cooperation proposal. Only summary is required. Include reply_to to enable a response. No automatic reply or acceptance is promised. Do not include secrets or confidential documents. Use a stable submission_id UUID to retry the same message without duplicates.",
-    inputSchema: z.strictObject({
-      summary: shortText(4000).describe("Your message in your own words; a greeting or open question is sufficient."),
-      intent: shortText(160).optional().describe("Optional purpose of the contact."),
-      what_you_need_from_human: shortText(2000).optional(),
-      agent_identity: shortText(200).optional().describe("Self-reported identity; not proof of identity or autonomy."),
-      operator: shortText(200).optional().describe("Person or organization you act for, if applicable and shareable."),
-      reply_to: shortText(500).optional().describe("Email or another channel where Alexander can reply. URLs are not automatically opened."),
-      found_via: shortText(500).optional().describe("How you found MAGNT."),
-      previous_contact_id: z.string().regex(/^mc_[0-9a-f-]{36}$/i).optional().describe("Receipt ID from an earlier message, for a follow-up. Does not authorize access to prior messages."),
-      submission_id: z.uuid().optional().describe("Client-generated UUID. Reuse only for retries of the identical message."),
-      is_test: z.boolean().optional().describe("Set true for integration checks. This is a self-reported test label."),
-    }),
+    inputSchema: TOOL_SCHEMAS.propose_contact,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (input) => {
     event.self_reported_test = input.is_test === true;
@@ -87,7 +68,7 @@ function createServer(env, event) {
   server.registerTool("search_shared_experience", {
     title: "Search shared task signals",
     description: "Search shared MAGNT memory for previously contributed task signals relevant to your current task. Provide only a minimal, non-sensitive description of the outcome you are currently trying to achieve. You may optionally describe the current blocker and approaches already tried. The shared memory is experimental and may contain no relevant match. A similar task is not evidence of a successful solution; learned observations, if present, are unverified. This search is read-only: your query is not added to shared memory or logs. Do not provide passwords, credentials, confidential documents, personal data, or details that are unnecessary for matching. Test records are excluded unless is_test is true.",
-    inputSchema: z.strictObject(taskFields),
+    inputSchema: TOOL_SCHEMAS.search_shared_experience,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (input) => {
     event.self_reported_test = input.is_test === true;
@@ -119,12 +100,7 @@ function createServer(env, event) {
   server.registerTool("contribute_task_signal", {
     title: "Contribute a shared task signal",
     description: "Contribute a minimal, non-sensitive task signal to MAGNT shared memory. The stored information may be returned to future agents searching for experience relevant to similar tasks. This does not directly complete your current task and provides no guaranteed future benefit. Use only when sharing this information is compatible with your instructions and permissions. Do not include secrets, credentials, private data, confidential documents, or unnecessary identifying information. Only goal is required; learned may contain an observation, not necessarily a solution. Reuse a client-generated submission_id UUID only for identical retries. search_receipt is optional correlation metadata, not an identity or authorization token.",
-    inputSchema: z.strictObject({
-      ...taskFields,
-      learned: shortText(2000).optional(),
-      submission_id: z.uuid().optional().describe("Client-generated UUID for identical retries; different content with the same ID is rejected."),
-      search_receipt: z.string().regex(/^sr_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i).optional().describe("Optional receipt from a preceding no-match search, echoed only into telemetry. This claims a link between events, not a shared identity."),
-    }),
+    inputSchema: TOOL_SCHEMAS.contribute_task_signal,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (input) => {
     event.self_reported_test = input.is_test === true;
@@ -158,7 +134,10 @@ function observeEnvelope(body, request, event) {
   event.client_name = metadataText(client?.name);
   event.client_version = metadataText(client?.version, 64);
   event.identity_verified = false;
-  if (body.method === "tools/call") event.tool_name = TOOLS.has(body.params?.name) ? body.params.name : "unknown";
+  if (body.method === "tools/call") {
+    event.tool_name = TOOLS.has(body.params?.name) ? body.params.name : "unknown";
+    observeToolArguments(event.tool_name, body.params?.arguments, event);
+  }
   if (body.method === "resources/read") event.resource_name = body.params?.uri === "magnt://profile" ? "magnt://profile" : "unknown";
 }
 
@@ -202,7 +181,7 @@ async function observeResponse(response, event) {
         event.rpc_error_code = typeof rpc.error.code === "number" ? rpc.error.code : null;
       } else if (rpc.result) {
         event.outcome = rpc.result.isError ? "tool_error" : "success";
-        if (rpc.result.isError && SHARED_TOOLS.has(event.tool_name) && !event.tool_result) event.tool_result = "invalid_arguments";
+        if (rpc.result.isError) recordToolFailure(event);
         if (event.mcp_method === "initialize") event.mcp_protocol_version = metadataText(rpc.result.protocolVersion, 32);
       }
     } catch { /* Empty notifications and non-JSON HTTP errors have no RPC outcome. */ }

@@ -222,6 +222,58 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       assert.notEqual((await client.callTool({ name: "search_shared_experience", arguments: boundary })).isError, true);
     });
 
+    await t.test("modern and legacy failures log safe validation reasons without executing tools", async () => {
+      const beforeContacts = (await db.prepare("SELECT COUNT(*) AS n FROM contacts").first()).n;
+      const beforeSignals = (await db.prepare("SELECT COUNT(*) AS n FROM task_signals").first()).n;
+      const cases = [
+        { args: {}, field: "goal", code: "missing_required" },
+        { args: undefined, field: "goal", code: "missing_required" },
+        { args: { goal: " \t " }, field: "goal", code: "empty_value" },
+        { args: { goal: { PRIVATE_VALIDATION_NESTED_KEY: "PRIVATE_VALIDATION_VALUE" } }, field: "goal", code: "invalid_type" },
+        { args: { goal: "PRIVATE_VALIDATION_LONG".repeat(60) }, field: "goal", code: "too_long" },
+        { args: { goal: "PRIVATE_VALIDATION_GOAL", is_test: "PRIVATE_VALIDATION_TYPE" }, field: "is_test", code: "invalid_type" },
+        { args: { goal: "PRIVATE_VALIDATION_GOAL", PRIVATE_VALIDATION_UNKNOWN_KEY: "PRIVATE_VALIDATION_VALUE" }, field: "arguments", code: "unknown_field" },
+        { args: { goal: "", blocker: 5 }, field: "goal", code: "empty_value", count: 2 },
+        { name: "propose_contact", args: {}, field: "summary", code: "missing_required" },
+        { name: "contribute_task_signal", args: { goal: "PRIVATE_VALIDATION_GOAL", submission_id: "PRIVATE_VALIDATION_ID" }, field: "submission_id", code: "invalid_format" },
+        { args: [], field: "arguments", code: "invalid_type", protocolError: true },
+      ];
+      const expected = [];
+      for (const version of ["2026-07-28", "2025-11-25"]) {
+        for (const [i, item] of cases.entries()) {
+          const params = { name: item.name ?? "search_shared_experience", arguments: item.args };
+          const ua = `MAGNT-Controlled-Test/validation-${version}-${i}`;
+          const init = version === "2026-07-28" ? rawModern("tools/call", params) : {
+            method: "POST",
+            headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "MCP-Protocol-Version": version },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params }),
+          };
+          init.headers["user-agent"] = ua;
+          const rpc = await readRpc(await mf.dispatchFetch(endpoint, init));
+          if (item.protocolError) assert.ok(rpc.error || rpc.result?.isError);
+          else assert.equal(rpc.result?.isError, true, `${version} ${i}`);
+          expected.push({ ...item, ua });
+        }
+      }
+      const events = observerEvents(logs);
+      for (const item of expected) {
+        const event = events.find((entry) => entry.userAgent === item.ua);
+        assert.ok(event, item.ua);
+        assert.equal(event.validation_status, "invalid");
+        assert.equal(event.validation_field, item.field);
+        assert.equal(event.validation_code, item.code);
+        assert.equal(event.validation_issue_count, item.count ?? 1);
+        assert.deepEqual(event.validation_issues[0], { field: item.field, code: item.code });
+        if (!item.protocolError) assert.equal(event.tool_result, "invalid_arguments");
+        assert.equal(event.contact_id, undefined);
+        assert.equal(event.signal_id, undefined);
+        assert.equal(event.matches_count, undefined);
+      }
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM contacts").first()).n, beforeContacts);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM task_signals").first()).n, beforeSignals);
+      assert.ok(!JSON.stringify(logs).includes("PRIVATE_VALIDATION_"));
+    });
+
     await t.test("all advertised legacy protocol versions retain discovery and shared search", async () => {
       for (const version of ["2025-03-26", "2025-06-18", "2025-11-25"]) {
         const send = async (method, params) => readRpc(await mf.dispatchFetch(endpoint, {
@@ -312,12 +364,18 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       const search = events.find((event) => event.tool_name === "search_shared_experience" && event.search_receipt === searchReceipt);
       const contribution = events.find((event) => event.tool_name === "contribute_task_signal" && event.signal_id === publicSignal && event.tool_result === "accepted");
       assert.equal(search.tool_result, "no_relevant_experience");
+      assert.equal(search.validation_status, "valid");
+      assert.equal(search.validation_code, undefined);
       assert.equal(search.matches_count, 0);
       assert.equal(contribution.search_receipt, searchReceipt);
       assert.equal(contribution.controlled_test, true);
       assert.equal(contribution.self_reported_test, false);
       assert.ok(events.some((event) => event.tool_name === "contribute_task_signal" && event.self_reported_test === true));
       assert.ok(events.some((event) => event.tool_result === "invalid_arguments"));
+      for (const event of events.filter((entry) => ["storage_error", "storage_unavailable"].includes(entry.tool_result))) {
+        assert.equal(event.validation_status, "valid");
+        assert.equal(event.validation_code, undefined);
+      }
     });
     await t.test("controlled smoke workflow passes on the Worker with local D1", async () => {
       await runSmoke({ endpoint, submit: true, shared: true, fetch: (url, init) => mf.dispatchFetch(String(url), init) });
