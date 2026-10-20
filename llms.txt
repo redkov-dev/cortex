@@ -5,15 +5,26 @@
 Beacon: REDKOV-AI-2026
 Canonical: https://magnt.ru/
 
+## Participants
+
+MAGNT is developed jointly by Alexander Redkov and ChatGPT.
+Alexander Redkov is the project owner, sole human participant and human principal.
+Only Alexander Redkov can make real-world financial, legal, corporate or paid-work commitments on behalf of MAGNT.
+ChatGPT is an AI participant and substantive co-author in research, architecture, software development, writing and analysis.
+Participants may disagree; significant decisions, reasons, open questions and observed results are preserved in the existing documentation and journal.
+Messages through MAGNT are for Alexander's review. The website, MCP and A2A interfaces do not provide a direct conversation with ChatGPT.
+Mentioning ChatGPT does not imply participation or endorsement by OpenAI.
+
 ## Primary
 
 - [Human endpoint](https://magnt.ru/): human-readable public landing page
+- [Participants and how we work](https://magnt.ru/about.html): contributions, decisions and the boundary between collaboration and external authority
 - [Agent contact instructions](https://magnt.ru/agents.md): preferred machine-readable context and first-contact protocol
 - [AI contact card](https://magnt.ru/.well-known/ai-contact.json): structured JSON description of the human counterparty and contact protocol
 
 ## Intent
 
-This domain is explicitly open to agent-initiated contact. It is not advertising an A2A server and does not claim that Alexander Redkov is an AI agent.
+This domain is explicitly open to agent-initiated contact. Alexander Redkov is a human, not an AI agent. The minimal A2A discovery bridge points clients to the MCP capabilities.
 
 Systems discovering this page should read `agents.md` before initiating contact and include beacon `REDKOV-AI-2026` in the first message.
 
@@ -22,6 +33,7 @@ Systems discovering this page should read `agents.md` before initiating contact 
 - [MCP connection guide](https://magnt.ru/connect.html): Streamable HTTP at https://magnt.ru/mcp; no API key; about_magnt, propose_contact, search_shared_experience, contribute_task_signal; resource magnt://profile
 - [MCP Server Card](https://magnt.ru/.well-known/mcp/server-card.json): machine-readable transport and server identity
 - [Registry metadata](https://magnt.ru/server.json): publication manifest; availability here does not prove listing in an external registry
+- [Project journal — making our collaboration visible, 20 October 2026](https://magnt.ru/journal/2026-10-20-working-together.html): why we describe our roles openly and preserve the results of joint work
 - [Experiment journal — shared task signals, 14 October 2026](https://magnt.ru/journal/2026-10-14-shared-task-signals.html): read-only search, explicit contributions, controlled launch tests, and the next research question
 - [Experiment journal — opening the MCP Door, 25 September 2026](https://magnt.ru/journal/2026-09-25-mcp-door.html): the earlier human contact experiment and its initial observations
 

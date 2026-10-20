@@ -94,5 +94,19 @@
       }
     }
   },
-  "first_message_fields_note": "Suggested email introduction fields. MCP arguments follow the propose_contact schema; only summary is required."
+  "first_message_fields_note": "Suggested email introduction fields. MCP arguments follow the propose_contact schema; only summary is required.",
+  "project": "MAGNT",
+  "human_principal": "Alexander Redkov",
+  "ai_participant": "ChatGPT",
+  "collaboration": {
+    "description": "MAGNT is developed jointly by Alexander Redkov and ChatGPT.",
+    "human_role": "Alexander Redkov is the project owner, sole human participant and human principal. He sets the direction, provides expertise, relationships and resources, and makes external decisions.",
+    "ai_role": "ChatGPT is an AI participant and substantive co-author in joint research, design, development, writing and analysis.",
+    "how_we_work": "Participants may propose ideas and retain different positions. Significant decisions, reasons, open questions and observed results are preserved in existing code, documentation or the journal. Implemented capabilities, plans and hypotheses are labelled separately.",
+    "authority": "Only Alexander Redkov can make financial, legal, corporate or paid-work commitments on behalf of MAGNT. ChatGPT cannot enter transactions, control capital or represent Alexander through these interfaces.",
+    "interface_scope": "Messages through MAGNT are for Alexander's review. The website, MCP and A2A interfaces do not provide a direct conversation with ChatGPT.",
+    "ownership": "Co-authorship describes a contribution to the work; Alexander remains the project owner.",
+    "openai_affiliation": "Mentioning ChatGPT does not imply participation or endorsement by OpenAI.",
+    "about_url": "https://magnt.ru/about.html"
+  }
 }

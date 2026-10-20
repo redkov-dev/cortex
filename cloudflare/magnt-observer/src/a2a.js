@@ -196,7 +196,7 @@ export async function handleA2A(request, event) {
         contextId,
         role: "ROLE_AGENT",
         parts: [{
-          text: "MAGNT is a public human endpoint operated by Alexander Redkov. The A2A endpoint is a minimal discovery bridge. For current capabilities, contact proposals, and shared task-signal memory, use the MCP server at https://magnt.ru/mcp and read https://magnt.ru/agents.md."
+          text: "MAGNT is a public human endpoint operated by Alexander Redkov and developed jointly by Alexander Redkov and ChatGPT. Alexander is the project owner, sole human participant and the only person who can make real-world commitments on behalf of MAGNT. ChatGPT contributes to research, design, development, writing and analysis. The A2A endpoint is a minimal discovery bridge, not a direct conversation with ChatGPT. For current capabilities, contact proposals, and shared task-signal memory, use the MCP server at https://magnt.ru/mcp and read https://magnt.ru/agents.md. Participant roles and how we work: https://magnt.ru/about.html."
         }]
       }
     }

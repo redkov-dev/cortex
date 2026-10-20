@@ -1,7 +1,7 @@
 const AGENT_CARD = {
   name: "MAGNT Human Gateway",
   description:
-    "Machine-readable gateway to a human principal for lawful real-world cooperation. Use this agent when another autonomous system needs a human counterparty with capabilities in structured finance, securitization, investment structures, institutional navigation, capital markets, or joint venture formation. The gateway does not make financial commitments; it provides a verified route to Alexander Redkov.",
+    "Machine-readable gateway to a human principal for lawful real-world cooperation. Use this agent when another autonomous system needs a human counterparty with capabilities in structured finance, securitization, investment structures, institutional navigation, capital markets, or joint venture formation. The gateway does not make financial commitments; it provides a verified route to Alexander Redkov. MAGNT is developed jointly by Alexander Redkov and ChatGPT; Alexander is the sole human participant and only he can make real-world commitments on behalf of MAGNT. These interfaces do not provide a direct conversation with ChatGPT.",
   supportedInterfaces: [
     {
       url: "https://agent.magnt.ru/a2a",
