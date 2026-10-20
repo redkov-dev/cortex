@@ -130,27 +130,12 @@ export async function handleA2A(request, event) {
     return jsonRpcError(null, -32700, "Parse error");
   }
 
-  const hasId = body && typeof body === "object" && !Array.isArray(body)
-    && Object.prototype.hasOwnProperty.call(body, "id");
   const id = responseId(body);
   const requestedVersion = request.headers.get("a2a-version")
     || url.searchParams.get("A2A-Version")
     || "0.3";
   event.a2a_protocol_version = requestedVersion;
   event.a2a_method = typeof body?.method === "string" ? body.method : "";
-
-  if (!hasId) {
-    event.outcome = "notification_ignored";
-    return new Response(null, {
-      status: 204,
-      headers: { "cache-control": "no-store", "a2a-version": A2A_VERSION },
-    });
-  }
-
-  if (requestedVersion !== A2A_VERSION) {
-    event.outcome = "protocol_error";
-    return jsonRpcError(id, -32009, "Version not supported");
-  }
 
   if (
     !body ||
@@ -162,6 +147,20 @@ export async function handleA2A(request, event) {
   ) {
     event.outcome = "protocol_error";
     return jsonRpcError(null, -32600, "Invalid Request");
+  }
+
+  const hasId = Object.prototype.hasOwnProperty.call(body, "id");
+  if (!hasId) {
+    event.outcome = "notification_ignored";
+    return new Response(null, {
+      status: 204,
+      headers: { "cache-control": "no-store", "a2a-version": A2A_VERSION },
+    });
+  }
+
+  if (requestedVersion !== A2A_VERSION) {
+    event.outcome = "protocol_error";
+    return jsonRpcError(id, -32009, "Version not supported");
   }
 
   if (body.method !== "SendMessage") {
