@@ -156,7 +156,7 @@ test("A2A rejects invalid JSON-RPC ids", async () => {
   }
 });
 
-test("A2A does not answer JSON-RPC notifications", async () => {
+test("A2A does not answer valid JSON-RPC notifications", async () => {
   const event = {};
   const request = new Request("https://magnt.ru/a2a", {
     method: "POST",
@@ -171,6 +171,27 @@ test("A2A does not answer JSON-RPC notifications", async () => {
   assert.equal(response.status, 204);
   assert.equal(await response.text(), "");
   assert.equal(event.outcome, "notification_ignored");
+});
+
+test("A2A rejects malformed envelopes without id instead of treating them as notifications", async () => {
+  for (const malformed of [
+    [],
+    { jsonrpc: "1.0", method: "SendMessage" },
+    { jsonrpc: "2.0" },
+  ]) {
+    const event = {};
+    const request = new Request("https://magnt.ru/a2a", {
+      method: "POST",
+      headers: { "content-type": "application/json", "a2a-version": "1.0" },
+      body: JSON.stringify(malformed),
+    });
+    const response = await handleA2A(request, event);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.id, null);
+    assert.equal(body.error.code, -32600);
+    assert.equal(event.outcome, "protocol_error");
+  }
 });
 
 test("A2A rejects bodies above 24 KiB before JSON parsing", async () => {
