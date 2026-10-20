@@ -111,8 +111,20 @@ test("A2A accepts all JSON data values in a data part", async () => {
   }
 });
 
+test("A2A accepts ProtoJSON URL-safe and unpadded base64 raw parts", async () => {
+  for (const raw of ["_w", "AQ", "AQI=", "AQID"]) {
+    const event = {};
+    const response = await handleA2A(messageRequest({
+      id: "raw-valid",
+      message: { messageId: "m-raw", role: "ROLE_USER", parts: [{ raw }] },
+    }), event);
+    const body = await response.json();
+    assert.ok(body.result?.message, `${raw} should be valid ProtoJSON base64`);
+  }
+});
+
 test("A2A rejects malformed message parts", async () => {
-  for (const badPart of [null, {}, { text: "x", url: "https://example.com" }, { raw: "%%%" }]) {
+  for (const badPart of [null, {}, { text: "x", url: "https://example.com" }, { raw: "%%%" }, { raw: "A" }, { raw: "==" }]) {
     const event = {};
     const response = await handleA2A(messageRequest({
       id: "bad-part",
@@ -142,4 +154,34 @@ test("A2A rejects invalid JSON-RPC ids", async () => {
     assert.equal(body.id, null);
     assert.equal(body.error.code, -32600);
   }
+});
+
+test("A2A does not answer JSON-RPC notifications", async () => {
+  const event = {};
+  const request = new Request("https://magnt.ru/a2a", {
+    method: "POST",
+    headers: { "content-type": "application/json", "a2a-version": "1.0" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "SendMessage",
+      params: { message: { messageId: "m-notify", role: "ROLE_USER", parts: [{ text: "Hello" }] } },
+    }),
+  });
+  const response = await handleA2A(request, event);
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "");
+  assert.equal(event.outcome, "notification_ignored");
+});
+
+test("A2A rejects bodies above 24 KiB before JSON parsing", async () => {
+  const event = {};
+  const oversized = "x".repeat(24 * 1024 + 1);
+  const request = new Request("https://magnt.ru/a2a", {
+    method: "POST",
+    headers: { "content-type": "application/json", "a2a-version": "1.0" },
+    body: oversized,
+  });
+  const response = await handleA2A(request, event);
+  assert.equal(response.status, 413);
+  assert.equal(event.outcome, "body_too_large");
 });
