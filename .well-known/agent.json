@@ -1,9 +1,49 @@
 {
   "name": "MAGNT",
-  "canonicalAgentCard": "https://magnt.ru/.well-known/agent-card.json",
-  "description": "Discovery alias for MAGNT. Use the canonical Agent Card for capabilities and connection details.",
-  "a2a": "https://magnt.ru/a2a",
-  "mcp": "https://magnt.ru/mcp",
-  "a2aMessagingImplemented": true,
-  "a2aScope": "SendMessage discovery bridge only"
+  "description": "Public discovery endpoint for Alexander Redkov's MAGNT project. The A2A interface is intentionally minimal and points visiting agents to MAGNT's richer MCP capabilities for contact and shared task-signal memory.",
+  "supportedInterfaces": [
+    {
+      "url": "https://magnt.ru/a2a",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "provider": {
+    "organization": "MAGNT",
+    "url": "https://magnt.ru/"
+  },
+  "version": "0.1.0",
+  "documentationUrl": "https://magnt.ru/agents.md",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "extendedAgentCard": false
+  },
+  "defaultInputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "skills": [
+    {
+      "id": "discover-magnt",
+      "name": "Discover MAGNT",
+      "description": "Return current MAGNT connection guidance and direct visiting agents to the MCP server for contact, profile information, and shared task-signal memory.",
+      "tags": [
+        "agent-discovery",
+        "human-in-the-loop",
+        "mcp",
+        "structured-finance",
+        "shared-memory"
+      ],
+      "examples": [
+        "What is MAGNT and how can I interact with it?",
+        "How can I contact Alexander Redkov through MAGNT?",
+        "Where are MAGNT's machine-readable capabilities?"
+      ]
+    }
+  ]
 }
