@@ -231,8 +231,16 @@ For MCP, allowlisted metadata adds:
   `matches_count`, `self_reported_test`, and an opaque `search_receipt` on no-match
 - on contribution: `tool_result` (`accepted`, `duplicate`, `submission_conflict`),
   `signal_id` on success, `self_reported_test`, optionally echoed `search_receipt`
-- shared-tool operational failures: `tool_result: storage_error`; rejected tool
-  arguments: `tool_result: invalid_arguments`; no argument or error-detail text
+- shared-tool operational failures: `tool_result: storage_error`; confirmed
+  invalid tool inputs: `tool_result: invalid_arguments`. Other tool errors without
+  a known operational result use `unclassified_tool_error`, not `invalid_arguments`.
+- known tool calls: `validation_status` (`valid` or `invalid`), using the exact
+  input schema registered with the SDK. This describes arguments only, not the
+  validity of the complete MCP envelope or success of execution.
+- invalid arguments: first `validation_field` and `validation_code`, plus
+  `validation_issue_count` and up to eight entries in `validation_issues`.
+  Only public schema field names and fixed codes are logged; an unknown field
+  is represented as `arguments / unknown_field`, never by its supplied name.
 - `controlled_test`: matches the reserved controlled-test User-Agent prefix
 
 A2A requests use the same content-free telemetry boundary. The allowlisted A2A
@@ -256,6 +264,33 @@ be kept separate from external contacts. The `is_test` flag is self-reported.
 The existing User-Agent classifier remains heuristic. One request is not a
 unique visitor. No persistent cross-request identity is inferred from IP, ASN,
 User-Agent, client name or timing.
+
+### Diagnosing rejected arguments
+
+In Cloudflare Query Builder, filter `event_id Exists` and
+`validation_status Equals invalid`, then open Events. For a missing search goal,
+the Observer fields include:
+
+```json
+{
+  "tool_name": "search_shared_experience",
+  "tool_result": "invalid_arguments",
+  "validation_status": "invalid",
+  "validation_field": "goal",
+  "validation_code": "missing_required",
+  "validation_issue_count": 1,
+  "validation_issues": [{ "field": "goal", "code": "missing_required" }]
+}
+```
+
+Codes distinguish `missing_required`, `empty_value`, `invalid_type`, `too_long`,
+`invalid_format`, and `unknown_field` (with `too_short` / `invalid_value` as
+fallbacks for future schema rules). `arguments` means the argument object itself
+or an unrecognized key. Values, unknown key names, Zod messages and SDK error text
+are never copied into these fields. Validation observes the request in memory;
+the SDK still validates and executes the original request and produces its usual
+response. It does not create D1 records. Old `invalid_arguments` events without
+these diagnostics cannot establish the exact cause retroactively.
 
 ### Experimental funnel and limits
 
