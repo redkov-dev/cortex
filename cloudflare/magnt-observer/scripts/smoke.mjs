@@ -12,7 +12,7 @@ export async function runSmoke({ endpoint, submit = false, shared = false, fetch
     await client.connect(transport, { timeout: 15000 });
     const tools = await client.listTools();
     assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), ["about_magnt", "contribute_task_signal", "propose_contact", "search_shared_experience"]);
-    assert.equal(tools.tools.find((tool) => tool.name === "search_shared_experience").annotations.readOnlyHint, true);
+    assert.equal(tools.tools.find((tool) => tool.name === "search_shared_experience").annotations.readOnlyHint, false);
     const resources = await client.listResources();
     assert.ok(resources.resources.some((resource) => resource.uri === "magnt://profile"));
     await client.readResource({ uri: "magnt://profile" });
@@ -20,11 +20,10 @@ export async function runSmoke({ endpoint, submit = false, shared = false, fetch
     assert.equal(about.structuredContent.name, "MAGNT");
     console.log(JSON.stringify({ endpoint, connected: true, tools: tools.tools.map((tool) => tool.name), storage_configured: about.structuredContent.contact.storage_available }));
     if (shared) {
-      // Two unique words prevent earlier smoke runs from producing a false match.
       const goal = `magntsmoke${crypto.randomUUID().replaceAll("-", "")} taskcheck${crypto.randomUUID().replaceAll("-", "")}`;
       const search = (is_test) => client.callTool({ name: "search_shared_experience", arguments: { goal, is_test } });
       const before = await search(true);
-      assert.notEqual(before.isError, true, "Shared search unavailable; apply migration 0002 before deployment.");
+      assert.notEqual(before.isError, true, "Shared search unavailable; apply migrations 0002 and 0003 before deployment.");
       assert.equal(before.structuredContent.status, "no_relevant_experience");
       const input = {
         goal, learned: "Controlled deployment check with synthetic goal tokens. Not an external task or a verified solution.",
