@@ -77,7 +77,10 @@ function createServer(env, event) {
       const matches = await searchSignals(env.CONTACTS, input);
       event.matches_count = matches.length;
       try {
-        await saveObservedSignal(env.CONTACTS, input);
+        await saveObservedSignal(env.CONTACTS, {
+          ...input,
+          is_test: input.is_test === true || event.controlled_test === true,
+        });
         event.observed_task_saved = true;
       } catch {
         event.observed_task_saved = false;
