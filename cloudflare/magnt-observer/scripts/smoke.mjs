@@ -23,7 +23,7 @@ export async function runSmoke({ endpoint, submit = false, shared = false, fetch
       const goal = `magntsmoke${crypto.randomUUID().replaceAll("-", "")} taskcheck${crypto.randomUUID().replaceAll("-", "")}`;
       const search = (is_test) => client.callTool({ name: "search_shared_experience", arguments: { goal, is_test } });
       const before = await search(true);
-      assert.notEqual(before.isError, true, "Shared search unavailable; apply migrations 0002 and 0003 before deployment.");
+      assert.notEqual(before.isError, true, "Shared search unavailable; check migration 0002 and D1. Verify migration 0003 separately in private D1.");
       assert.equal(before.structuredContent.status, "no_relevant_experience");
       const input = {
         goal, learned: "Controlled deployment check with synthetic goal tokens. Not an external task or a verified solution.",
@@ -45,7 +45,8 @@ export async function runSmoke({ endpoint, submit = false, shared = false, fetch
       assert.equal(ordinary.structuredContent.status, "no_relevant_experience", "Test task leaked into ordinary search.");
       console.log(JSON.stringify({ shared_memory_test: "passed", signal_id: first.structuredContent.signal_id,
         search_receipt: before.structuredContent.search_receipt, self_reported_test: true,
-        duplicate_retry_verified: true, ordinary_search_excludes_test: true }));
+        duplicate_retry_verified: true, ordinary_search_excludes_test: true,
+        observed_task_storage: "requires_private_d1_verification" }));
     }
     if (submit) {
       const input = {

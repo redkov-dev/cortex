@@ -162,6 +162,25 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       }
     });
 
+    await t.test("ordinary searches retain separate private observations without making them searchable", async () => {
+      const goal = "ORDINARY_OBSERVATION_SENTINEL unique observation demand";
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const rpc = await readRpc(await mf.dispatchFetch(endpoint,
+          rawModern("tools/call", { name: "search_shared_experience", arguments: { goal } })));
+        assert.notEqual(rpc.result.isError, true);
+        assert.equal(rpc.result.structuredContent.status, "no_relevant_experience");
+      }
+      const rows = (await db.prepare("SELECT * FROM observed_task_signals WHERE goal = ?").bind(goal).all()).results;
+      assert.equal(rows.length, 2);
+      assert.notEqual(rows[0].observation_id, rows[1].observation_id);
+      for (const row of rows) {
+        assert.equal(row.self_reported_test, 0);
+        assert.equal(row.blocker, null);
+        assert.equal(row.tried, null);
+      }
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM task_signals").first()).n, 0);
+    });
+
     let publicSignal, testSignal, searchReceipt;
     const task = {
       goal: "TASK_GOAL_SENTINEL durable Cloudflare D1 database migration",
@@ -207,6 +226,18 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
         assert.deepEqual(Object.keys(match).sort(), ["blocker", "goal", "learned", "signal_id", "tried"]);
         assert.equal(match.learned, task.learned);
       }
+    });
+
+    await t.test("controlled ordinary-corpus searches retain only test observations", async () => {
+      const ordinaryCount = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 0").first()).n;
+      const testCount = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 1").first()).n;
+      const request = rawModern("tools/call", { name: "search_shared_experience", arguments: { goal: task.goal, is_test: false } });
+      request.headers["user-agent"] = "MAGNT-Controlled-Test/0.2";
+      const result = (await readRpc(await mf.dispatchFetch(endpoint, request))).result;
+      assert.notEqual(result.isError, true);
+      assert.deepEqual(result.structuredContent.matches.map((match) => match.signal_id), [publicSignal]);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 0").first()).n, ordinaryCount);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 1").first()).n, testCount + 1);
     });
 
     await t.test("hidden records are excluded and retries do not reactivate them", async () => {
@@ -357,10 +388,15 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
         const partialDb = await partial.getD1Database("CONTACTS");
         const sql = await readFile("migrations/0002_task_signals.sql", "utf8");
         for (const statement of sql.split(";").filter((s) => s.trim())) await partialDb.prepare(statement).run();
-        const result = (await readRpc(await partial.dispatchFetch(endpoint,
-          rawModern("tools/call", { name: "search_shared_experience", arguments: { goal: "OBSERVATION_MIGRATION_SENTINEL task" } })))).result;
+        const request = rawModern("tools/call", { name: "search_shared_experience", arguments: { goal: "OBSERVATION_MIGRATION_SENTINEL task" } });
+        request.headers["user-agent"] = "MAGNT-Controlled-Test/missing-observation-table";
+        const result = (await readRpc(await partial.dispatchFetch(endpoint, request))).result;
         assert.notEqual(result.isError, true);
         assert.equal(result.structuredContent.status, "no_relevant_experience");
+        assert.equal(await partialDb.prepare("SELECT name FROM sqlite_master WHERE name = 'observed_task_signals'").first(), null);
+        const event = observerEvents(logs).find((entry) => entry.userAgent === request.headers["user-agent"]);
+        assert.equal(event.observed_task_saved, false);
+        assert.equal(event.tool_result, "no_relevant_experience");
       } finally { await partial.dispose(); }
     });
 
@@ -383,7 +419,7 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       assert.ok(!serialized.includes("PRIVATE_CONTENT_SENTINEL"));
       assert.ok(!serialized.includes("private-reply@example.test"));
       for (const marker of ["QUERY_GOAL_SENTINEL", "QUERY_BLOCKER_SENTINEL", "QUERY_TRIED_SENTINEL", "TASK_GOAL_SENTINEL",
-        "TASK_BLOCKER_SENTINEL", "TASK_TRIED_SENTINEL", "TASK_LEARNED_SENTINEL", "TASK_RECEIPT_SENTINEL", "STORAGE_ERROR_SENTINEL", "OBSERVATION_MIGRATION_SENTINEL"]) {
+        "TASK_BLOCKER_SENTINEL", "TASK_TRIED_SENTINEL", "TASK_LEARNED_SENTINEL", "TASK_RECEIPT_SENTINEL", "STORAGE_ERROR_SENTINEL", "OBSERVATION_MIGRATION_SENTINEL", "ORDINARY_OBSERVATION_SENTINEL"]) {
         assert.ok(!serialized.includes(marker), marker);
       }
       const events = observerEvents(logs);
@@ -406,7 +442,11 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       }
     });
     await t.test("controlled smoke workflow passes on the Worker with local D1", async () => {
+      const ordinaryCount = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 0").first()).n;
+      const testCount = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 1").first()).n;
       await runSmoke({ endpoint, submit: true, shared: true, fetch: (url, init) => mf.dispatchFetch(String(url), init) });
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 0").first()).n, ordinaryCount);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 1").first()).n, testCount + 3);
     });
   } finally {
     await client.close();

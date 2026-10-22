@@ -100,7 +100,8 @@ to insert one row into `observed_task_signals`. It stores only:
 - an opaque random `observation_id` used inside the table;
 - `created_at`;
 - `goal`, optional `blocker` and `tried` exactly as validated for the tool;
-- the self-reported `is_test` flag.
+- a test flag set when `is_test=true` or the request uses the controlled-test
+  User-Agent. This does not change which contributed corpus is searched.
 
 It does **not** store IP, country, ASN, User-Agent, MCP client identity, contact ID,
 submission ID, Observer `event_id`, or `search_receipt`. The observation ID is not
@@ -139,8 +140,10 @@ authority over the caller's task. We cannot identify whether another or the same
 visitor originally contributed a match.
 
 Ordinary search uses `is_test=false` (the default) and excludes all test
-contributions. `is_test=true` reads only test contributions. Observed tasks retain
-the same self-reported test flag for separate review. The flag is not authentication.
+contributions. `is_test=true` reads only test contributions. Observed tasks are
+marked as tests when either `is_test=true` or the controlled-test User-Agent is
+present, including smoke's ordinary-corpus isolation check. Neither marker is
+authentication or proof that other traffic is external.
 
 ### Reviewing shared contributions
 
@@ -225,10 +228,11 @@ Before considering deployment complete:
    `shared_memory_version: 0.2.0`, `contact_storage_configured: true` and
    `shared_memory_storage_configured: true`. Binding flags do not certify schema
    readiness or database health. The probe exposes no task counts or contents.
-2. Run the controlled test below. Its receipt confirms storage worked; the probe
-   alone only checks that a binding exists.
-3. In D1 confirm that the controlled search created an `is_test=1` row in
-   `observed_task_signals`, and that the test contribution is in `task_signals`.
+2. Run the controlled test below. Its receipt confirms shared-contribution
+   storage worked; public search success does not confirm observation storage.
+3. In private D1 confirm that all three controlled searches created rows with
+   `self_reported_test=1` in `observed_task_signals`, and that the test contribution
+   is in `task_signals`. See the rollout guide for a query using the smoke receipt.
 
 ```sh
 npm run smoke -- https://magnt.ru/mcp --shared-memory-test --submit-test

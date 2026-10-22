@@ -9,7 +9,7 @@
 **Проблема:** `search_shared_experience` получает `goal` (и опционально `blocker`, `tried`), но содержание запроса намеренно не сохранялось. Если агент не делает отдельный `contribute_task_signal`, самый ценный сигнал — его реальная задача — исчезает.
 
 **Решение:**
-- каждый валидный `search_shared_experience` сохраняет отдельный `observed_task_signal`;
+- после успешного чтения общего корпуса каждый валидный `search_shared_experience` пытается сохранить отдельный `observed_task_signal`;
 - сохраняются только `goal`, опциональные `blocker`/`tried`, время и `is_test`;
 - наблюдаемые задачи лежат в отдельной таблице `observed_task_signals` и никогда не возвращаются как shared experience;
 - `contributed_task_signal` остаётся отдельным добровольно опубликованным корпусом;

@@ -36,11 +36,14 @@ ORDER BY name;
 
 ## Что именно теперь сохраняется при поиске
 
-Каждый валидный `search_shared_experience` выполняет две независимые операции:
+Каждый валидный `search_shared_experience` сначала читает общий корпус:
 
 1. читает `task_signals` и ищет ранее **добровольно опубликованный** опыт;
-2. best-effort сохраняет приватный `observed_task_signal` с полями `goal`,
-   опциональными `blocker`/`tried`, временем и `is_test`.
+2. после успешного чтения best-effort сохраняет приватный `observed_task_signal`
+   с полями `goal`, опциональными `blocker`/`tried`, случайным ID, временем и
+   `self_reported_test`. Метка равна 1 при `is_test=true` **или**
+   `User-Agent: MAGNT-Controlled-Test/0.2`; выбор корпуса для поиска по-прежнему
+   определяется только аргументом `is_test`.
 
 `observed_task_signals` никогда не участвует в выдаче shared memory. В записи нет
 IP, User-Agent, client identity, contact/submission ID, Observer `event_id` или
@@ -70,11 +73,27 @@ npm run smoke -- https://magnt.ru/mcp --shared-memory-test --submit-test
 ```
 
 Тест проверяет четыре инструмента, профиль, чтение до/после явной записи,
-идемпотентность, изоляцию тестовой записи, сохранение тестовой наблюдаемой цели и
-прежний канал личных сообщений. Все записи помечены `is_test=true`, запросы —
-`MAGNT-Controlled-Test/0.2`. Текст задач в отчёт теста не выводится. Только после
-успешного production smoke техническая итерация считается запущенной. Это ещё не
-успех внешнего эксперимента.
+идемпотентность, изоляцию тестового вклада и прежний канал личных сообщений.
+Он делает три поиска: два с `is_test=true` и один с `is_test=false` для проверки
+обычного корпуса. Все запросы помечены `MAGNT-Controlled-Test/0.2`, поэтому все
+три приватных наблюдения должны иметь `self_reported_test=1`. Текст задач в отчёт
+теста не выводится.
+
+**Успешный MCP smoke не подтверждает сохранение наблюдений:** поиск специально
+продолжает работать без таблицы 0003. После него проверить в приватной D1,
+подставив `signal_id` из результата smoke:
+
+```sql
+SELECT o.self_reported_test, COUNT(*) AS observations
+FROM observed_task_signals AS o
+JOIN task_signals AS s ON s.goal = o.goal
+WHERE s.signal_id = 'SIGNAL_ID_FROM_SMOKE'
+GROUP BY o.self_reported_test;
+```
+
+Ожидается одна строка: `self_reported_test=1`, `observations=3`. Отсутствие строк
+означает, что сохранение наблюдений не подтверждено. Только после smoke **и**
+проверки D1 итерация считается запущенной. Это ещё не успех внешнего эксперимента.
 
 ## Если есть настроенная CLI-авторизация Cloudflare
 
