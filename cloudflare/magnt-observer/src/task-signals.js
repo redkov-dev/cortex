@@ -1,4 +1,4 @@
-export const SHARED_MEMORY_VERSION = "0.1.0";
+export const SHARED_MEMORY_VERSION = "0.2.0";
 export const CANDIDATE_LIMIT = 100;
 export const MATCH_LIMIT = 3;
 export const MIN_SCORE = 0.15;
@@ -44,8 +44,8 @@ export function rankSignals(input, rows) {
 
 export async function searchSignals(db, input) {
   if (!db) throw new Error("Storage unavailable");
-  // The query text is never bound into SQL, written, cached, hashed, or logged.
-  // No lazy schema creation: a missing migration is an operational error.
+  // Query text is used only for in-memory matching. The search function itself
+  // remains read-only; observed task storage is a separate operation.
   const result = await db.prepare(`
     SELECT signal_id, goal, blocker, tried, learned
     FROM task_signals
@@ -55,6 +55,25 @@ export async function searchSignals(db, input) {
   `).bind(input.is_test === true ? 1 : 0, CANDIDATE_LIMIT).all();
   if (!result.success) throw new Error("Read not confirmed");
   return result.results.length ? rankSignals(input, result.results) : [];
+}
+
+export async function saveObservedSignal(db, input) {
+  if (!db) throw new Error("Storage unavailable");
+  const observationId = `ots_${crypto.randomUUID()}`;
+  const result = await db.prepare(`
+    INSERT INTO observed_task_signals (
+      observation_id, created_at, goal, blocker, tried, self_reported_test
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(
+    observationId,
+    new Date().toISOString(),
+    input.goal,
+    input.blocker ?? null,
+    input.tried ?? null,
+    input.is_test === true ? 1 : 0,
+  ).run();
+  if (!result.success) throw new Error("Write not confirmed");
+  return { observation_id: observationId };
 }
 
 async function hashContent(value) {
