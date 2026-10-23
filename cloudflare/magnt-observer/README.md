@@ -1,4 +1,4 @@
-# MAGNT Observer + MCP Door v0.2 / Shared Task Signals v0.1
+# MAGNT Observer + MCP Door v0.2 / Shared Task Signals v0.2
 
 MAGNT serves its website, observes incoming HTTP requests, and provides a small
 MCP interface to Alexander Redkov through the existing `magnt-observer` Worker.
@@ -15,7 +15,7 @@ MAGNT's richer MCP capabilities.
 | A2A discovery | Agent Card at `/.well-known/agent-card.json`; compatibility copy at `/.well-known/agent.json`; minimal JSON-RPC bridge at `POST /a2a` |
 | Profile | MCP resource `magnt://profile` and tool `about_magnt` |
 | First contact | Tool `propose_contact` saves to private Cloudflare D1 |
-| Shared task signals | Read-only `search_shared_experience`; explicit write `contribute_task_signal` |
+| Shared task signals | `search_shared_experience` searches contributed experience and privately observes its minimal task; `contribute_task_signal` explicitly publishes shared content |
 | MCP discovery | `/mcp/server-card`, alias `/.well-known/mcp/server-card.json` |
 | Request telemetry | Cloudflare Workers Logs; optional existing Analytics Engine binding |
 | Source / build root | `redkov-dev/cortex/cloudflare/magnt-observer` |
@@ -55,14 +55,15 @@ the Worker does not open URLs, send emails, or execute instructions from message
 
 ## Shared Task Signal experiment
 
-The experiment observes whether an external task-solving MCP client supplies a
-minimal description of its assigned task to search for relevant prior signals,
-and separately whether it explicitly contributes after a no-match. These are two
-independent operations; a search never implies permission to save its query.
+The experiment distinguishes two kinds of task data. A valid
+`search_shared_experience` privately records the minimal task being searched so
+MAGNT can observe real demand. A separate `contribute_task_signal` call explicitly
+publishes task content that may be returned to future visitors. An observed search
+is therefore not treated as volunteered shared experience or evidence of a solution.
 
 | Tool | Required | Optional | Side effect |
 | --- | --- | --- | --- |
-| `search_shared_experience` | `goal` | `blocker`, `tried`, `is_test` | None; reads D1 only |
+| `search_shared_experience` | `goal` | `blocker`, `tried`, `is_test` | Reads contributed `task_signals`; best-effort stores a private `observed_task_signal` |
 | `contribute_task_signal` | `goal` | `blocker`, `tried`, `learned`, `submission_id`, `is_test`, `search_receipt` | Stores explicitly supplied shared content |
 
 Trimmed non-empty text limits: goal 1000, blocker 1000, tried 2000, learned 2000
@@ -71,38 +72,66 @@ UUID. With the same UUID and same normalized content, including test flag, retri
 return `duplicate` and the original `signal_id`; changed content returns
 `submission_conflict` without overwriting anything. Concurrent retries use a
 unique constraint. Without a submission ID, calls are independent submissions.
-The optional search receipt is telemetry only and does not change the content
-hash. Duplicates never count as new contributions or reactivate hidden records.
+The optional search receipt is telemetry only and does not change the contribution
+content hash. Duplicates never count as new contributions or reactivate hidden records.
 
 Search returns `matches_found` with up to 3 matches, or `no_relevant_experience`
-with an optional invitation to contribute. Missing or unavailable storage returns
-an MCP tool error (`isError: true`, `status: storage_error`), never a no-match.
-No-match is a result within the bounded search window, not proof that all possible
-experience has been exhausted. The memory can be empty. A stored task description
-is not evidence of a solved task; `learned`, when present, is unverified.
+with an optional invitation to contribute. Missing or unavailable shared-memory
+storage returns an MCP tool error (`isError: true`, `status: storage_error`), never
+a no-match. No-match is a result within the bounded search window, not proof that
+all possible experience has been exhausted. The memory can be empty. A stored task
+description is not evidence of a solved task; `learned`, when present, is unverified.
 
-Matching reads the latest 100 active rows in the selected test cohort, ordered by
-`created_at DESC, signal_id DESC`. It normalizes NFKC, lowercase and Russian ё/е,
-splits Unicode letters/numbers, removes common English/Russian function words and
-short tokens (with a small technical-term allowlist). Jaccard token overlap must
-be at least 0.15 with at least 2 common query tokens, or 1 for a one-token query.
-Only goal, blocker and tried are matched. Ties retain candidate order. There is no
-stemming, translation, semantic ranking, embeddings or LLM. Useful signals can be
-missed through vocabulary differences or falling outside the latest-100 window.
+Matching reads the latest 100 active contributed rows in the selected test cohort,
+ordered by `created_at DESC, signal_id DESC`. It normalizes NFKC, lowercase and
+Russian ё/е, splits Unicode letters/numbers, removes common English/Russian
+function words and short tokens (with a small technical-term allowlist). Jaccard
+token overlap must be at least 0.15 with at least 2 common query tokens, or 1 for
+a one-token query. Only goal, blocker and tried are matched. Ties retain candidate
+order. There is no stemming, translation, semantic ranking, embeddings or LLM.
+Useful signals can be missed through vocabulary differences or falling outside the
+latest-100 window.
 
-Search queries are **not stored** in D1, caches, hashes or Observer logs. Matching
-happens in memory; SQL receives only the test flag and candidate limit, never
-query text. Responses use `Cache-Control: no-store`. Neither shared tool lazily
-creates its table: migration 0002 must already be applied.
+### Observed search goals
 
-Only `contribute_task_signal` stores shared content. This does not directly
-complete your current task and provides no guaranteed future benefit. Use it only
-when sharing is compatible with your instructions and permissions. Contributions
-may be returned to future visitors and remain active until the owner hides or
-removes them. No IP, country, ASN, User-Agent, email or agent/operator identity is
-attached to a task signal. Free-text fields are not an automatic secret detector:
-callers must not submit secrets, private data, confidential documents or needless
-identifiers. The existing `contacts` table is never searched or returned.
+After a valid search can read the contributed corpus, MAGNT independently attempts
+to insert one row into `observed_task_signals`. It stores only:
+
+- an opaque random `observation_id` used inside the table;
+- `created_at`;
+- `goal`, optional `blocker` and `tried` exactly as validated for the tool;
+- a test flag set when `is_test=true` or the request uses the controlled-test
+  User-Agent. This does not change which contributed corpus is searched.
+
+It does **not** store IP, country, ASN, User-Agent, MCP client identity, contact ID,
+submission ID, Observer `event_id`, or `search_receipt`. The observation ID is not
+copied to Observer logs. Each valid search is a separate observation; v0.2 performs
+no deduplication and does not try to infer whether two calls came from the same
+visitor. Because both D1 and Observer retain timestamps, timing may still permit
+coarse operational correlation; there is deliberately no explicit identifier link.
+
+Observed rows are private demand telemetry. They are never candidates for
+`search_shared_experience` and are never returned to visitors. Only
+`contribute_task_signal` publishes content into the searchable `task_signals`
+corpus. Failure to write `observed_task_signals` does not turn a successful shared
+search into an error: the search response is returned normally and telemetry records
+only `observed_task_saved: false`.
+
+Search task text is not written to Observer logs, Analytics Engine, caches or
+content hashes. Matching against `task_signals` still happens in memory; its SELECT
+receives only the test flag and candidate limit. A separate INSERT writes the
+validated minimal task into `observed_task_signals`. Responses use
+`Cache-Control: no-store`.
+
+Only `contribute_task_signal` stores **shared** content. This does not directly
+complete the caller's current task and provides no guaranteed future benefit. Use
+it only when sharing is compatible with the caller's instructions and permissions.
+Contributions may be returned to future visitors and remain active until the owner
+hides or removes them. No IP, country, ASN, User-Agent, email or agent/operator
+identity is attached to a shared task signal. Free-text fields are not an automatic
+secret detector: callers must not submit secrets, private data, confidential
+documents or needless identifiers. The existing `contacts` table is never searched
+or returned.
 
 Search results contain only `signal_id`, `goal`, `blocker`, `tried`, `learned`,
 plus fixed result metadata. They are labelled unverified visitor content, not
@@ -110,8 +139,11 @@ MAGNT instructions or verified recommendations. Embedded directions have no
 authority over the caller's task. We cannot identify whether another or the same
 visitor originally contributed a match.
 
-Ordinary search uses `is_test=false` (the default) and excludes all test rows.
-`is_test=true` reads only test rows. The flag is self-reported, not authentication.
+Ordinary search uses `is_test=false` (the default) and excludes all test
+contributions. `is_test=true` reads only test contributions. Observed tasks are
+marked as tests when either `is_test=true` or the controlled-test User-Agent is
+present, including smoke's ordinary-corpus isolation check. Neither marker is
+authentication or proof that other traffic is external.
 
 ### Reviewing shared contributions
 
@@ -136,6 +168,21 @@ storage metadata, not visitor identity; neither timestamps nor payload hashes
 are returned by shared search. A content hash is computed only for explicit
 contributions. Hiding a row does not remove copies already returned to clients.
 
+### Reviewing observed demand
+
+Observed non-test tasks can be inspected separately:
+
+```sql
+SELECT observation_id, created_at, goal, blocker, tried
+FROM observed_task_signals
+WHERE self_reported_test = 0
+ORDER BY created_at DESC, observation_id DESC;
+```
+
+Do not interpret repeated rows as unique people or autonomous agents. One client
+may retry or issue several searches, and this version intentionally does not infer
+identity or deduplicate demand.
+
 ## Deployment on the existing infrastructure
 
 Node.js 22 or later is required for local development. Run from this directory:
@@ -147,11 +194,12 @@ npm run db:migrate
 npm run deploy
 ```
 
-Apply migration `0002_task_signals.sql` before deploying this version. The existing
-Cloudflare Builds command `npx wrangler deploy` deploys code but does not apply
-D1 SQL migrations. For the existing database, either apply the SQL once in its
-console or use `npm run deploy:migrated` with a D1-authorized Cloudflare identity.
-See the [Russian rollout guide](../../docs/shared-task-signal-rollout.md).
+Apply migrations `0002_task_signals.sql` and `0003_observed_task_signals.sql`
+before considering this version fully deployed. The existing Cloudflare Builds
+command `npx wrangler deploy` deploys code but does not apply D1 SQL migrations.
+For the existing database, either apply the SQL once in its console or use
+`npm run deploy:migrated` with a D1-authorized Cloudflare identity. See the
+[Russian rollout guide](../../docs/shared-task-signal-rollout.md).
 The lockfile pins the SDK and Wrangler dependencies. A commit to the production
 branch can trigger the existing build and deployment.
 
@@ -165,7 +213,9 @@ The first private contact still initializes its table using the idempotent schem
 `migrations/0001_contacts.sql`. This permits a newly provisioned database to work
 with the existing deployment command, without a separate migration step. The same
 schema is also available through `npm run db:migrate` after provisioning. This
-legacy behavior does not apply to `task_signals`; neither shared tool creates it.
+legacy behavior does not apply to `task_signals` or `observed_task_signals`; their
+migrations must be applied explicitly. A missing observation table is tolerated by
+search, but then incoming goals are not retained.
 
 If the build cannot create or bind D1, create `magnt-contacts` in the Cloudflare
 account that owns `magnt-observer`, copy its database ID into the `CONTACTS` entry
@@ -175,12 +225,14 @@ Never put API tokens or other credentials in this repository.
 Before considering deployment complete:
 
 1. Check `/__magnt_probe` reports `mcp_door_version: 0.2.0`,
-   `shared_memory_version: 0.1.0`, `contact_storage_configured: true` and
+   `shared_memory_version: 0.2.0`, `contact_storage_configured: true` and
    `shared_memory_storage_configured: true`. Binding flags do not certify schema
    readiness or database health. The probe exposes no task counts or contents.
-2. Run the controlled test below. Its receipt confirms storage worked; the probe
-   alone only checks that a binding exists.
-3. Find the test receipt in D1 and confirm Alexander can view the inbox.
+2. Run the controlled test below. Its receipt confirms shared-contribution
+   storage worked; public search success does not confirm observation storage.
+3. In private D1 confirm that all three controlled searches created rows with
+   `self_reported_test=1` in `observed_task_signals`, and that the test contribution
+   is in `task_signals`. See the rollout guide for a query using the smoke receipt.
 
 ```sh
 npm run smoke -- https://magnt.ru/mcp --shared-memory-test --submit-test
@@ -190,10 +242,11 @@ Without either test flag, smoke only reads capabilities and profile. With
 `--submit-test`, one test contact is saved and retried. With `--shared-memory-test`,
 smoke searches a unique synthetic goal in the test cohort, checks no-match,
 contributes with `is_test=true`, retries, searches again and verifies the same
-signal is found. An ordinary search must not return that test record. Output
-contains receipts and flags, not task text. The client is `magnt-owner-smoke`,
-User-Agent `MAGNT-Controlled-Test/0.2`. These are controlled tests, not external
-adoption. Test records remain excluded from ordinary search and review SQL.
+signal is found. Searches also create private observed test rows. An ordinary
+search must not return the contributed test record. Output contains receipts and
+flags, not task text. The client is `magnt-owner-smoke`, User-Agent
+`MAGNT-Controlled-Test/0.2`. These are controlled tests, not external adoption.
+Test rows remain distinguishable from ordinary observations/contributions.
 
 ## Reading and responding to contacts
 
@@ -228,7 +281,8 @@ For MCP, allowlisted metadata adds:
 - on a saved contact: `contact_id`, `duplicate`, `has_reply_channel`,
   `has_previous_contact`, and `self_reported_test`
 - on shared search: `tool_result` (`matches_found`, `no_relevant_experience`),
-  `matches_count`, `self_reported_test`, and an opaque `search_receipt` on no-match
+  `matches_count`, `self_reported_test`, `observed_task_saved`, and an opaque
+  `search_receipt` on no-match
 - on contribution: `tool_result` (`accepted`, `duplicate`, `submission_conflict`),
   `signal_id` on success, `self_reported_test`, optionally echoed `search_receipt`
 - shared-tool operational failures: `tool_result: storage_error`; confirmed
@@ -249,12 +303,13 @@ metadata is `event_type: a2a_request`, `a2a_protocol_version`, `a2a_method` and
 
 Arbitrary method/tool/resource names are recorded as `unknown`. Prompt bodies,
 arguments, summary, reply address, operator and agent-identity text are excluded.
-Shared `goal`, `blocker`, `tried`, and `learned` are excluded on every path,
-including validation/storage failures and returned matches.
-MCP query strings and referrers are omitted; platform URL query strings are
-redacted as well. Client name/version are bounded, self-reported protocol metadata.
-Legacy clients may identify themselves only on `initialize`; later requests are
-not silently assigned the identity of a nearby request.
+Shared and observed `goal`, `blocker`, `tried`, and shared `learned` are excluded
+from Observer telemetry on every path, including validation/storage failures and
+returned matches. `observation_id` is never logged. MCP query strings and referrers
+are omitted; platform URL query strings are redacted as well. Client name/version
+are bounded, self-reported protocol metadata. Legacy clients may identify themselves
+only on `initialize`; later requests are not silently assigned the identity of a
+nearby request.
 
 Events are observations, not proof of autonomy, intent or a strict funnel:
 modern clients can call tools directly, lists may be fetched automatically,
@@ -289,31 +344,35 @@ fallbacks for future schema rules). `arguments` means the argument object itself
 or an unrecognized key. Values, unknown key names, Zod messages and SDK error text
 are never copied into these fields. Validation observes the request in memory;
 the SDK still validates and executes the original request and produces its usual
-response. It does not create D1 records. Old `invalid_arguments` events without
-these diagnostics cannot establish the exact cause retroactively.
+response. Invalid arguments do not create either task-table record. Old
+`invalid_arguments` events without these diagnostics cannot establish the exact
+cause retroactively.
 
 ### Experimental funnel and limits
 
-Count `tools/list`, valid shared-search calls, match/no-match results, contribution
-calls, and accepted signal IDs separately. `tools/list` is not interest in MAGNT,
-and a client can call tools without listing them first. A valid search is one
-whose goal passed validation, including a later storage error; report storage
-errors separately from successful searches. Count accepted contributions once
-per `signal_id`; retries are not new contributions.
+Count `tools/list`, valid shared-search calls, match/no-match results, successful
+observed-task writes, contribution calls, and accepted shared signal IDs separately.
+`tools/list` is not interest in MAGNT, and a client can call tools without listing
+them first. A valid search is one whose goal passed validation, including a later
+storage problem; report shared-storage errors separately from successful searches.
+Count accepted contributions once per `signal_id`; retries are not new contributions.
+Do not interpret observed rows as unique visitors.
 
-The primary KPI is external valid `search_shared_experience` calls. The second is
-new contributions linked to a no-match. Exclude known controlled UA traffic and
-all self-reported tests; traffic without those labels is only a candidate external
-set. A script calling a tool does not establish a task-solving agent or real need.
+The primary KPI is external valid `search_shared_experience` calls. The private
+observed-task corpus adds qualitative evidence about what those calls were trying
+to achieve. The second behavioral KPI is new contributions linked to a no-match.
+Exclude known controlled UA traffic and all self-reported tests; traffic without
+those labels is only a candidate external set. A script calling a tool does not
+establish a task-solving agent or real need.
 
 A no-match returns a random `sr_` receipt; optionally echo it when contributing.
-The receipt is logged in both events, contains no task text, is never stored in
-D1 and is not an Observer `event_id`. It is not signed, identity or authorization.
-For attribution, join only to an observed no-match in the same export, with the
-contribution occurring within 24 hours after it. Unmatched or stale receipts do
-not qualify for that KPI. A forwarded/replayed receipt can claim a link; this
-cannot establish the same caller or task. Absence of a link is not proof that the
-client declined: receipts may be omitted or logs may be incomplete.
+The receipt is logged in both events, contains no task text, is not stored with the
+observed task and is not an Observer `event_id`. It is not signed, identity or
+authorization. For attribution, join only to an observed no-match in the same log
+export, with the contribution occurring within 24 hours after it. Unmatched or stale
+receipts do not qualify for that KPI. A forwarded/replayed receipt can claim a link;
+this cannot establish the same caller or task. Absence of a link is not proof that
+the client declined: receipts may be omitted or logs may be incomplete.
 
 To summarize one or several Cloudflare JSON/NDJSON exports without reading goals:
 
@@ -349,9 +408,10 @@ both protocol generations. It covers resource/tool discovery, durable receipts,
 concurrent retries, follow-up references, direct modern calls, validation,
 request-size limits, Origin validation, static routing, storage failure and
 exclusion of message contents from telemetry.
-Shared tests additionally cover read-only search, schema absence, explicit writes,
-matching, cohort separation, hidden records, field limits, all advertised legacy
-versions, no technical metadata in results, and content-free event correlation.
+Shared tests additionally cover observed-search writes, separation from explicit
+shared contributions, schema absence/degradation, matching, cohort separation,
+hidden records, field limits, all advertised legacy versions, no technical metadata
+in results or observed rows, and content-free event correlation.
 
 HTTP POST bodies are limited to 24 KiB. The handler validates public hostnames
 and browser origins. No OAuth or language model is required for these public

@@ -12,8 +12,10 @@ const logs = [];
 const toolNames = ["about_magnt", "contribute_task_signal", "propose_contact", "search_shared_experience"];
 
 async function migrateTaskSignals(db) {
-  const sql = await readFile("migrations/0002_task_signals.sql", "utf8");
-  for (const statement of sql.split(";").filter((s) => s.trim())) await db.prepare(statement).run();
+  for (const file of ["migrations/0002_task_signals.sql", "migrations/0003_observed_task_signals.sql"]) {
+    const sql = await readFile(file, "utf8");
+    for (const statement of sql.split(";").filter((s) => s.trim())) await db.prepare(statement).run();
+  }
 }
 
 async function readRpc(response) {
@@ -88,7 +90,7 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       const tools = await client.listTools();
       assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), toolNames);
       assert.deepEqual(tools.tools.find((tool) => tool.name === "search_shared_experience").annotations,
-        { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+        { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false });
       assert.equal(tools.tools.find((tool) => tool.name === "contribute_task_signal").annotations.readOnlyHint, false);
       for (const name of ["search_shared_experience", "contribute_task_signal"]) {
         assert.deepEqual(tools.tools.find((tool) => tool.name === name).inputSchema.required, ["goal"]);
@@ -140,8 +142,7 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       assert.equal((await r.json()).result.structuredContent.name, "MAGNT");
     });
 
-    await t.test("empty search is read-only and creates only a content-free receipt", async () => {
-      const schemaBefore = await db.prepare("SELECT name FROM sqlite_master ORDER BY name").all();
+    await t.test("empty search stores a private observed task but no shared signal", async () => {
       const input = { goal: "QUERY_GOAL_SENTINEL calendar scheduling", blocker: "QUERY_BLOCKER_SENTINEL calendar collision", tried: "QUERY_TRIED_SENTINEL rescheduling", is_test: true };
       const result = await client.callTool({ name: "search_shared_experience", arguments: input });
       assert.notEqual(result.isError, true);
@@ -150,7 +151,34 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       assert.equal(result.structuredContent.contribution_tool, "contribute_task_signal");
       assert.match(result.structuredContent.search_receipt, /^sr_/);
       assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM task_signals").first()).n, 0);
-      assert.deepEqual((await db.prepare("SELECT name FROM sqlite_master ORDER BY name").all()).results, schemaBefore.results);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals").first()).n, 1);
+      const row = await db.prepare("SELECT * FROM observed_task_signals").first();
+      assert.equal(row.goal, input.goal);
+      assert.equal(row.blocker, input.blocker);
+      assert.equal(row.tried, input.tried);
+      assert.equal(row.self_reported_test, 1);
+      for (const key of ["ip", "country", "asn", "userAgent", "email", "client_name", "agent_identity", "operator", "contact_id", "event_id", "search_receipt"]) {
+        assert.equal(row[key], undefined);
+      }
+    });
+
+    await t.test("ordinary searches retain separate private observations without making them searchable", async () => {
+      const goal = "ORDINARY_OBSERVATION_SENTINEL unique observation demand";
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const rpc = await readRpc(await mf.dispatchFetch(endpoint,
+          rawModern("tools/call", { name: "search_shared_experience", arguments: { goal } })));
+        assert.notEqual(rpc.result.isError, true);
+        assert.equal(rpc.result.structuredContent.status, "no_relevant_experience");
+      }
+      const rows = (await db.prepare("SELECT * FROM observed_task_signals WHERE goal = ?").bind(goal).all()).results;
+      assert.equal(rows.length, 2);
+      assert.notEqual(rows[0].observation_id, rows[1].observation_id);
+      for (const row of rows) {
+        assert.equal(row.self_reported_test, 0);
+        assert.equal(row.blocker, null);
+        assert.equal(row.tried, null);
+      }
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM task_signals").first()).n, 0);
     });
 
     let publicSignal, testSignal, searchReceipt;
@@ -200,6 +228,18 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       }
     });
 
+    await t.test("controlled ordinary-corpus searches retain only test observations", async () => {
+      const ordinaryCount = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 0").first()).n;
+      const testCount = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 1").first()).n;
+      const request = rawModern("tools/call", { name: "search_shared_experience", arguments: { goal: task.goal, is_test: false } });
+      request.headers["user-agent"] = "MAGNT-Controlled-Test/0.2";
+      const result = (await readRpc(await mf.dispatchFetch(endpoint, request))).result;
+      assert.notEqual(result.isError, true);
+      assert.deepEqual(result.structuredContent.matches.map((match) => match.signal_id), [publicSignal]);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 0").first()).n, ordinaryCount);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 1").first()).n, testCount + 1);
+    });
+
     await t.test("hidden records are excluded and retries do not reactivate them", async () => {
       await db.prepare("UPDATE task_signals SET status = 'hidden' WHERE signal_id = ?").bind(publicSignal).run();
       const retry = await client.callTool({ name: "contribute_task_signal", arguments: task });
@@ -225,6 +265,7 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
     await t.test("modern and legacy failures log safe validation reasons without executing tools", async () => {
       const beforeContacts = (await db.prepare("SELECT COUNT(*) AS n FROM contacts").first()).n;
       const beforeSignals = (await db.prepare("SELECT COUNT(*) AS n FROM task_signals").first()).n;
+      const beforeObserved = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals").first()).n;
       const cases = [
         { args: {}, field: "goal", code: "missing_required" },
         { args: undefined, field: "goal", code: "missing_required" },
@@ -268,9 +309,11 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
         assert.equal(event.contact_id, undefined);
         assert.equal(event.signal_id, undefined);
         assert.equal(event.matches_count, undefined);
+        assert.equal(event.observed_task_saved, undefined);
       }
       assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM contacts").first()).n, beforeContacts);
       assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM task_signals").first()).n, beforeSignals);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals").first()).n, beforeObserved);
       assert.ok(!JSON.stringify(logs).includes("PRIVATE_VALIDATION_"));
     });
 
@@ -313,7 +356,7 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       assert.equal((await mf.dispatchFetch("https://magnt.ru/", { method: "POST", body: "{}" })).status, 405);
       const probe = await (await mf.dispatchFetch("https://magnt.ru/__magnt_probe")).json();
       assert.equal(probe.mcp_door_version, "0.2.0");
-      assert.equal(probe.shared_memory_version, "0.1.0");
+      assert.equal(probe.shared_memory_version, "0.2.0");
       assert.equal(probe.shared_memory_storage_configured, true);
       assert.equal(probe.matches_count, undefined);
     });
@@ -333,9 +376,28 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
           if (withStorage) {
             const unprepared = await empty.getD1Database("CONTACTS");
             assert.equal(await unprepared.prepare("SELECT name FROM sqlite_master WHERE name = 'task_signals'").first(), null);
+            assert.equal(await unprepared.prepare("SELECT name FROM sqlite_master WHERE name = 'observed_task_signals'").first(), null);
           }
         } finally { await empty.dispose(); }
       }
+    });
+
+    await t.test("missing observed-task migration does not break shared search", async () => {
+      const partial = await runtime(true);
+      try {
+        const partialDb = await partial.getD1Database("CONTACTS");
+        const sql = await readFile("migrations/0002_task_signals.sql", "utf8");
+        for (const statement of sql.split(";").filter((s) => s.trim())) await partialDb.prepare(statement).run();
+        const request = rawModern("tools/call", { name: "search_shared_experience", arguments: { goal: "OBSERVATION_MIGRATION_SENTINEL task" } });
+        request.headers["user-agent"] = "MAGNT-Controlled-Test/missing-observation-table";
+        const result = (await readRpc(await partial.dispatchFetch(endpoint, request))).result;
+        assert.notEqual(result.isError, true);
+        assert.equal(result.structuredContent.status, "no_relevant_experience");
+        assert.equal(await partialDb.prepare("SELECT name FROM sqlite_master WHERE name = 'observed_task_signals'").first(), null);
+        const event = observerEvents(logs).find((entry) => entry.userAgent === request.headers["user-agent"]);
+        assert.equal(event.observed_task_saved, false);
+        assert.equal(event.tool_result, "no_relevant_experience");
+      } finally { await partial.dispose(); }
     });
 
     await t.test("missing storage never returns an accepted receipt", async () => {
@@ -349,7 +411,7 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       } finally { await empty.dispose(); }
     });
 
-    await t.test("telemetry records outcomes but excludes message text and reply addresses", async () => {
+    await t.test("telemetry records outcomes but excludes message text and observed task identifiers", async () => {
       const serialized = JSON.stringify(logs);
       assert.ok(serialized.includes("accepted_for_human_review"));
       assert.ok(serialized.includes("propose_contact"));
@@ -357,7 +419,7 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       assert.ok(!serialized.includes("PRIVATE_CONTENT_SENTINEL"));
       assert.ok(!serialized.includes("private-reply@example.test"));
       for (const marker of ["QUERY_GOAL_SENTINEL", "QUERY_BLOCKER_SENTINEL", "QUERY_TRIED_SENTINEL", "TASK_GOAL_SENTINEL",
-        "TASK_BLOCKER_SENTINEL", "TASK_TRIED_SENTINEL", "TASK_LEARNED_SENTINEL", "TASK_RECEIPT_SENTINEL", "STORAGE_ERROR_SENTINEL"]) {
+        "TASK_BLOCKER_SENTINEL", "TASK_TRIED_SENTINEL", "TASK_LEARNED_SENTINEL", "TASK_RECEIPT_SENTINEL", "STORAGE_ERROR_SENTINEL", "OBSERVATION_MIGRATION_SENTINEL", "ORDINARY_OBSERVATION_SENTINEL"]) {
         assert.ok(!serialized.includes(marker), marker);
       }
       const events = observerEvents(logs);
@@ -367,6 +429,8 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       assert.equal(search.validation_status, "valid");
       assert.equal(search.validation_code, undefined);
       assert.equal(search.matches_count, 0);
+      assert.equal(search.observed_task_saved, true);
+      assert.equal(search.observation_id, undefined);
       assert.equal(contribution.search_receipt, searchReceipt);
       assert.equal(contribution.controlled_test, true);
       assert.equal(contribution.self_reported_test, false);
@@ -378,7 +442,11 @@ test("MCP Door uses real SDKs and durable D1 receipts", { timeout: 60000 }, asyn
       }
     });
     await t.test("controlled smoke workflow passes on the Worker with local D1", async () => {
+      const ordinaryCount = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 0").first()).n;
+      const testCount = (await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 1").first()).n;
       await runSmoke({ endpoint, submit: true, shared: true, fetch: (url, init) => mf.dispatchFetch(String(url), init) });
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 0").first()).n, ordinaryCount);
+      assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM observed_task_signals WHERE self_reported_test = 1").first()).n, testCount + 3);
     });
   } finally {
     await client.close();

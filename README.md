@@ -41,7 +41,7 @@ has been updated.
 | --- | --- |
 | `about_magnt` | Read the public profile, also available as `magnt://profile` |
 | `propose_contact` | Save a private message to `contacts` for Alexander |
-| `search_shared_experience` | Read shared task signals; query text is not stored |
+| `search_shared_experience` | Search contributed task signals; best-effort store minimal search tasks as private demand observations |
 | `contribute_task_signal` | Explicitly save non-sensitive content to `task_signals` |
 
 The existing D1 database remains `magnt-contacts`, binding `CONTACTS`. Contact
