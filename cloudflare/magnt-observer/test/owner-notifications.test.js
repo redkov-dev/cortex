@@ -156,6 +156,37 @@ test('Telegram retry_after pauses the whole destination, including newly discove
   f.advance(7200_000); assert.equal((await f.run()).sent, 2);
 });
 
+test('a failed channel update rolls back delivery and preserves the known Telegram pause during cleanup', async (t) => {
+  const f = await fixture(t); await contact(f.db); await contact(f.db);
+  await f.run(); // Initialize the destination before installing a storage fault.
+  await f.db.prepare('DELETE FROM owner_notification_outbox').run();
+  f.requests.length = 0; f.advance(60_000);
+  const rateLimitedAt = f.time();
+  await f.db.prepare(`CREATE TRIGGER fail_channel_backoff BEFORE UPDATE OF next_send_at ON owner_notification_state
+    BEGIN SELECT RAISE(ABORT, 'PRIVATE_SQL_ERROR'); END`).run();
+  let rolledBack = false;
+  const failingDb = { prepare: (sql) => f.db.prepare(sql), batch: async (statements) => {
+    try { return await f.db.batch(statements); }
+    catch (error) {
+      const statuses = (await f.db.prepare('SELECT status FROM owner_notification_outbox ORDER BY status').all()).results;
+      assert.deepEqual(statuses.map((r) => r.status), ['pending', 'sending']);
+      rolledBack = true;
+      await f.db.prepare('DROP TRIGGER fail_channel_backoff').run();
+      throw error;
+    }
+  } };
+  const result = await f.run({ CONTACTS: failingDb }, { fetcher: async () =>
+    Response.json({ ok: false, error_code: 429, parameters: { retry_after: 7200 } }, { status: 429 }) });
+  assert.equal(result.error_code, 'storage_unavailable'); assert.equal(result.retried, 0);
+  assert.equal(rolledBack, true);
+  const state = await f.db.prepare('SELECT next_send_at, lease_token FROM owner_notification_state').first();
+  assert.equal(state.next_send_at, rateLimitedAt + 7200_000); assert.equal(state.lease_token, null);
+  f.advance(60_000); assert.equal((await f.run()).outcome, 'busy_or_backoff');
+  assert.equal(f.requests.length, 0);
+  f.advance(7200_000); assert.equal((await f.run()).sent, 2);
+  assert.ok(!JSON.stringify(f.logs).includes('PRIVATE_SQL_ERROR'));
+});
+
 test('permanent failures are diagnosable and a deliberate manual retry can recover them', async (t) => {
   const f = await fixture(t); await contact(f.db);
   const first = await f.run({}, { fetcher: async () => Response.json({ ok: false, error_code: 403, description: 'DO_NOT_LOG_ME' }, { status: 403 }) });
@@ -201,6 +232,18 @@ test('a stale sender cannot acknowledge another lease or claim a confirmed deliv
   assert.equal((await f.db.prepare('SELECT status FROM owner_notification_outbox').first()).status, 'sending');
 });
 
+test('losing the channel lease prevents both delivery acknowledgment and overwriting a newer pause', async (t) => {
+  const f = await fixture(t); await contact(f.db);
+  const result = await f.run({}, { fetcher: async () => {
+    await f.db.prepare("UPDATE owner_notification_state SET lease_token = 'another-owner', next_send_at = ?")
+      .bind(START + 7200_000).run();
+    return telegramOk();
+  } });
+  assert.equal(result.sent, 0); assert.equal(result.error_code, 'delivery_lease_lost');
+  assert.equal((await f.db.prepare('SELECT status FROM owner_notification_outbox').first()).status, 'sending');
+  assert.equal((await f.db.prepare('SELECT next_send_at FROM owner_notification_state').first()).next_send_at, START + 7200_000);
+});
+
 test('concurrent scheduled runs send each notification once with a real D1 lease', async (t) => {
   const f = await fixture(t); await contact(f.db); await contact(f.db);
   let release, entered, calls = 0;
@@ -231,12 +274,11 @@ test('an expired send lease is recovered, but an exhausted interrupted attempt r
 
 test('a database failure after Telegram acceptance stays unconfirmed and can cause a documented retry', async (t) => {
   const f = await fixture(t); await contact(f.db);
-  const failingDb = { prepare(sql) {
-    if (sql.includes("SET status = 'sent'")) return { bind() { return { run: async () => { throw Error('PRIVATE_SQL_ERROR'); } }; } };
-    return f.db.prepare(sql);
-  } };
-  assert.equal((await f.run({ CONTACTS: failingDb })).error_code, 'storage_unavailable');
+  await f.db.prepare(`CREATE TRIGGER fail_delivery_ack BEFORE UPDATE OF status ON owner_notification_outbox
+    WHEN NEW.status = 'sent' BEGIN SELECT RAISE(ABORT, 'PRIVATE_SQL_ERROR'); END`).run();
+  assert.equal((await f.run()).error_code, 'storage_unavailable');
   assert.equal((await f.db.prepare('SELECT status FROM owner_notification_outbox').first()).status, 'sending');
+  await f.db.prepare('DROP TRIGGER fail_delivery_ack').run();
   f.advance(121_000); assert.equal((await f.run()).sent, 1);
   assert.equal(f.requests.length, 2);
   assert.ok(!JSON.stringify(f.logs).includes('PRIVATE_SQL_ERROR'));

@@ -119,25 +119,35 @@ async function claim(db, token, time, maxAttempts) {
   `).bind(token, time + LEASE_MS, maxAttempts, time, time).first();
 }
 
-async function settle(db, row, token, time, result, config) {
+function settlement(row, time, result, config) {
   if (result.ok) {
-    const saved = await db.prepare(`UPDATE owner_notification_outbox
-      SET status = 'sent', telegram_message_id = ?, sent_at = ?, last_error_code = NULL,
-          lease_token = NULL, lease_until = 0
-      WHERE notification_id = ? AND status = 'sending' AND lease_token = ?`)
-      .bind(result.messageId, new Date(time).toISOString(), row.notification_id, token).run();
-    if (saved.meta.changes !== 1) throw new NotificationError('delivery_lease_lost');
-    return { status: 'sent', nextSendAt: time + SEND_INTERVAL_MS };
+    return { status: 'sent', nextAttemptAt: 0, nextSendAt: time + SEND_INTERVAL_MS,
+      messageId: result.messageId, sentAt: new Date(time).toISOString(), errorCode: null };
   }
   const delay = config.delays[Math.min(row.attempts - 1, config.delays.length - 1)] * 1000;
   const next = time + Math.max(delay, result.retryAfter ?? 0);
   const status = result.retryable && row.attempts < config.maxAttempts ? 'retry' : 'failed';
-  const saved = await db.prepare(`UPDATE owner_notification_outbox
-    SET status = ?, next_attempt_at = ?, last_error_code = ?, lease_token = NULL, lease_until = 0
-    WHERE notification_id = ? AND status = 'sending' AND lease_token = ?`)
-    .bind(status, next, result.code, row.notification_id, token).run();
-  if (saved.meta.changes !== 1) throw new NotificationError('delivery_lease_lost');
-  return { status, nextSendAt: result.local ? time : Math.max(next, result.retryable ? 0 : time + 3600_000) };
+  return { status, nextAttemptAt: next,
+    nextSendAt: result.local ? time : Math.max(next, result.retryable ? 0 : time + 3600_000),
+    messageId: null, sentAt: null, errorCode: result.code };
+}
+
+async function settle(db, row, token, delivery) {
+  // D1 batch is a transaction: the delivery and channel pause must commit together.
+  // changes() prevents a stale sender from updating the channel after a failed CAS.
+  const saved = await db.batch([
+    db.prepare(`UPDATE owner_notification_outbox
+      SET status = ?, next_attempt_at = ?, last_error_code = ?, telegram_message_id = ?, sent_at = ?,
+          lease_token = NULL, lease_until = 0
+      WHERE notification_id = ? AND status = 'sending' AND lease_token = ?
+        AND EXISTS (SELECT 1 FROM owner_notification_state WHERE destination = 'owner' AND lease_token = ?)`)
+      .bind(delivery.status, delivery.nextAttemptAt, delivery.errorCode, delivery.messageId, delivery.sentAt,
+        row.notification_id, token, token),
+    db.prepare(`UPDATE owner_notification_state SET next_send_at = MAX(next_send_at, ?)
+      WHERE destination = 'owner' AND lease_token = ? AND changes() = 1`)
+      .bind(delivery.nextSendAt, token),
+  ]);
+  if (saved.some((result) => result.meta.changes !== 1)) throw new NotificationError('delivery_lease_lost');
 }
 
 // All dependencies are injectable for tests; production uses the fixed Telegram origin.
@@ -151,7 +161,7 @@ export async function processOwnerNotifications(env, {
   const report = { event_type: 'owner_notifications', time: new Date(started).toISOString(),
     outcome: 'completed', discovered: 0, sent: 0, retried: 0, failed: 0 };
   const token = crypto.randomUUID();
-  let db, locked = false;
+  let db, locked = false, nextSendAt = 0;
   try {
     const config = configuration(env);
     db = env.CONTACTS;
@@ -174,7 +184,7 @@ export async function processOwnerNotifications(env, {
       SET status = 'failed', last_error_code = 'delivery_unconfirmed', lease_token = NULL, lease_until = 0
       WHERE attempts >= ? AND (status IN ('pending', 'retry') OR (status = 'sending' AND lease_until <= ?))`)
       .bind(config.maxAttempts, now()).run()).meta.changes;
-    let nextSendAt = state.next_send_at;
+    nextSendAt = state.next_send_at;
     for (let index = 0; index < SEND_LIMIT; index++) {
       const wait = Math.max(0, nextSendAt - now());
       if (now() + wait + REQUEST_TIMEOUT_MS >= started + RUN_BUDGET_MS) break;
@@ -188,11 +198,11 @@ export async function processOwnerNotifications(env, {
       const result = row.source_type === 'contact' && !contact
         ? { ok: false, retryable: false, local: true, code: 'source_unavailable' }
         : await sendTelegram(config, notificationText(row, contact, config.preview), fetcher);
-      const settled = await settle(db, row, token, now(), result, config);
-      report[settled.status === 'retry' ? 'retried' : settled.status]++;
+      const settled = settlement(row, now(), result, config);
+      // Retain a known Telegram pause for the cleanup attempt if the batch rolls back.
       nextSendAt = settled.nextSendAt;
-      await db.prepare(`UPDATE owner_notification_state SET next_send_at = ?
-        WHERE destination = 'owner' AND lease_token = ?`).bind(nextSendAt, token).run();
+      await settle(db, row, token, settled);
+      report[settled.status === 'retry' ? 'retried' : settled.status]++;
       log({ event_type: 'owner_notification_delivery', notification_id: row.notification_id,
         source_type: row.source_type, outcome: settled.status, attempt: row.attempts,
         ...(result.ok ? {} : { error_code: result.code }) });
@@ -207,9 +217,10 @@ export async function processOwnerNotifications(env, {
     if (locked) {
       try {
         await db.prepare(`UPDATE owner_notification_state
-          SET lease_token = NULL, lease_until = 0, last_run_at = ?, last_outcome = ?, last_error_code = ?
+          SET lease_token = NULL, lease_until = 0, next_send_at = MAX(next_send_at, ?),
+              last_run_at = ?, last_outcome = ?, last_error_code = ?
           WHERE destination = 'owner' AND lease_token = ?`)
-          .bind(new Date(now()).toISOString(), report.outcome, report.error_code ?? null, token).run();
+          .bind(nextSendAt, new Date(now()).toISOString(), report.outcome, report.error_code ?? null, token).run();
       } catch { report.outcome = 'error'; report.error_code = 'storage_unavailable'; }
     }
     log({ ...report, duration_ms: now() - started });
