@@ -2,6 +2,7 @@ import { handleMcp } from "./mcp.js";
 import { handleA2A } from "./a2a.js";
 import { SERVER_INFO } from "./profile.js";
 import { SHARED_MEMORY_VERSION } from "./task-signals.js";
+import { processOwnerNotifications } from "./owner-notifications.js";
 
 function classifyClient(ua = "") {
   const s = ua.toLowerCase();
@@ -74,6 +75,9 @@ function githubRawUrl(pathname) {
 }
 
 export default {
+  async scheduled(_controller, env) {
+    await processOwnerNotifications(env);
+  },
   async fetch(request, env, ctx) {
     const started = Date.now();
     const url = new URL(request.url);

@@ -4,6 +4,8 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-23",
   "compatibility_flags": ["nodejs_compat"],
+  "keep_vars": true,
+  "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [
     {
       "binding": "CONTACTS",
@@ -14,6 +16,7 @@
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "observability": {
     "enabled": true,
+    "traces": { "enabled": false },
     "redact_query_string": true,
     "head_sampling_rate": 1
   }
