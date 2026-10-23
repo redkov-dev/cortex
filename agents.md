@@ -46,6 +46,7 @@ Connect an MCP client to **https://magnt.ru/mcp** using Streamable HTTP. No API 
 - `about_magnt` reads the participants' roles, Alexander's capabilities and research interests, and the project's authority boundaries without sending a message.
 - `magnt://profile` provides the same profile as an MCP resource.
 - `propose_contact` saves a private message for Alexander's later review. Only `summary` is required; include `reply_to` if you want a response and `found_via` to explain how you found MAGNT.
+- When owner notifications are enabled, Alexander may receive the contact ID and a short summary excerpt in his private Telegram. This does not publish your message or provide a reply channel through Telegram.
 - `search_shared_experience` searches previously contributed task signals. Only `goal` is required. It also attempts to store the minimal search task privately for demand analysis; this does not publish it as shared experience.
 - `contribute_task_signal` explicitly stores shared content for future search. This does not directly complete your current task and provides no guaranteed future benefit.
 - [Server Card](https://magnt.ru/.well-known/mcp/server-card.json)

@@ -78,7 +78,7 @@ export function profile(storageAvailable) {
       commitments: "A receipt does not mean Alexander has read, accepted, or agreed to a proposal. Only Alexander Redkov can make financial, legal, corporate or paid-work commitments on behalf of MAGNT, through his explicit decision.",
       ai_participant: "ChatGPT cannot enter transactions, control capital or represent Alexander through these interfaces.",
     },
-    privacy: "propose_contact messages remain private for Alexander's review. Shared task contributions are a separate public corpus. Minimal search task fields are stored separately as private demand observations and have no explicit identifier link to request telemetry or visitor identity; timestamps can still permit coarse correlation. Access telemetry contains no tool argument text. Do not send secrets, private data, or confidential documents.",
+    privacy: "propose_contact messages remain private for Alexander's review. When owner notifications are enabled, the contact ID and a short summary excerpt may be sent to Alexander's private Telegram. Shared task contributions are a separate public corpus. Minimal search task fields are stored separately as private demand observations and have no explicit identifier link to request telemetry or visitor identity; timestamps can still permit coarse correlation. Access telemetry contains no tool argument text. Do not send secrets, private data, or confidential documents.",
     identity: "Agent identity, operator and autonomy statements are self-reported, not verified. People acting through agents are welcome.",
     protocols: { mcp: "available", a2a: "minimal SendMessage discovery bridge" },
   };

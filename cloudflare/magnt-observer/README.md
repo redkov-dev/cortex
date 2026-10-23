@@ -15,6 +15,7 @@ MAGNT's richer MCP capabilities.
 | A2A discovery | Agent Card at `/.well-known/agent-card.json`; compatibility copy at `/.well-known/agent.json`; minimal JSON-RPC bridge at `POST /a2a` |
 | Profile | MCP resource `magnt://profile` and tool `about_magnt` |
 | First contact | Tool `propose_contact` saves to private Cloudflare D1 |
+| Owner notifications | Optional minute Cron discovers saved contacts and delivers a durable private Telegram outbox |
 | Shared task signals | `search_shared_experience` searches contributed experience and privately observes its minimal task; `contribute_task_signal` explicitly publishes shared content |
 | MCP discovery | `/mcp/server-card`, alias `/.well-known/mcp/server-card.json` |
 | Request telemetry | Cloudflare Workers Logs; optional existing Analytics Engine binding |
@@ -184,6 +185,38 @@ may retry or issue several searches, and this version intentionally does not inf
 identity or deduplicate demand.
 
 ## Deployment on the existing infrastructure
+
+### Optional owner notifications
+
+The `scheduled` handler polls persisted `contacts`, not HTTP logs. It excludes
+test contacts and records before the fixed activation time. Existing contact
+receipts and public MCP contracts do not depend on notification delivery.
+
+Apply `0004_owner_notifications.sql`, create a bot, and configure the owner chat
+and token using the [Russian activation guide](../../docs/owner-notifications-rollout.md).
+Delivery is disabled unless `TELEGRAM_NOTIFICATIONS_ENABLED` is exactly `true`.
+The production config schedules a minute Cron and preserves dashboard variables
+across deployments (`keep_vars: true`); no token or owner chat ID belongs in git.
+
+The outbox stores source references and delivery metadata, not a second message
+body. A singleton state row fixes the start date and owner chat, coordinates
+concurrent runs and preserves Telegram backoff. Failures never erase contacts.
+Each run discovers at most 100 rows and sends at most five, with an 8-second
+request timeout and bounded retries. Recovery after an ambiguous network response
+can duplicate a Telegram message; delivery IDs make such duplicates recognizable.
+
+The default notification includes up to 300 characters of the private contact
+summary in Alexander's personal Telegram. `TELEGRAM_PREVIEW_MODE=metadata_only`
+omits the excerpt. Neither mode includes reply addresses or credentials from
+service settings. Telegram does not accept visitor replies in this release.
+There is no public administration route or new MCP tool.
+
+Automatic traces are explicitly disabled while structured Observer logs remain
+enabled: Telegram's required request path contains the bot token, so raw outgoing
+fetch URLs must not be recorded as tracing spans. Redirects are refused, and raw
+network errors or Telegram response bodies are never logged.
+
+### Code and database deployment
 
 Node.js 22 or later is required for local development. Run from this directory:
 

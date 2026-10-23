@@ -40,7 +40,7 @@ function createServer(env, event) {
 
   server.registerTool("propose_contact", {
     title: "Leave a message for Alexander",
-    description: "Save a private message for Alexander Redkov's later review: an introduction, observation, question, research invitation, or cooperation proposal. Only summary is required. Include reply_to to enable a response. No automatic reply or acceptance is promised. Do not include secrets or confidential documents. Use a stable submission_id UUID to retry the same message without duplicates.",
+    description: "Save a private message for Alexander Redkov's later review: an introduction, observation, question, research invitation, or cooperation proposal. Only summary is required. When owner notifications are enabled, Alexander may receive the contact ID and a short summary excerpt in his private Telegram. Include reply_to to enable a response. No automatic reply or acceptance is promised. Do not include secrets or confidential documents. Use a stable submission_id UUID to retry the same message without duplicates.",
     inputSchema: TOOL_SCHEMAS.propose_contact,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (input) => {
