@@ -16,8 +16,8 @@ const statements = (sql) => sql.replace(/--[^\n]*/g, '').split(';').filter((s) =
 
 async function fixture(t, { through = 5, bindings = settings } = {}) {
   const modules = {};
-  for (const name of (await readdir('dist')).filter((n) => n.endsWith('.js') || n.endsWith('.sql'))) {
-    modules[name] = { type: name.endsWith('.sql') ? 'text' : 'esm', contents: await readFile(`dist/${name}`, 'utf8') };
+  for (const name of (await readdir(process.env.MAGNT_TEST_BUNDLE ?? 'dist')).filter((n) => n.endsWith('.js') || n.endsWith('.sql'))) {
+    modules[name] = { type: name.endsWith('.sql') ? 'text' : 'esm', contents: await readFile(`${process.env.MAGNT_TEST_BUNDLE ?? "dist"}/${name}`, 'utf8') };
   }
   const logs = [], requests = [];
   const mf = new Miniflare({ cf: false, logRequests: false, telemetry: { enabled: false },

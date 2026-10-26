@@ -36,8 +36,8 @@ function observerEvents(value, result = []) {
 
 async function runtime(withStorage = true) {
   const modules = {};
-  for (const name of (await readdir("dist")).filter((n) => n.endsWith(".js") || n.endsWith(".sql"))) {
-    modules[name] = { type: name.endsWith(".sql") ? "text" : "esm", contents: await readFile(`dist/${name}`, "utf8") };
+  for (const name of (await readdir(process.env.MAGNT_TEST_BUNDLE ?? "dist")).filter((n) => n.endsWith(".js") || n.endsWith(".sql"))) {
+    modules[name] = { type: name.endsWith(".sql") ? "text" : "esm", contents: await readFile(`${process.env.MAGNT_TEST_BUNDLE ?? "dist"}/${name}`, "utf8") };
   }
   return new Miniflare({
     cf: false,

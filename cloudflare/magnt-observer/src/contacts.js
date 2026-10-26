@@ -76,3 +76,24 @@ export async function saveContact(db, input, client) {
     continuation: "For a follow-up, include this contact_id as previous_contact_id in a new message. Reuse submission_id only when retrying the identical message. Supply reply_to if you want a response.",
   };
 }
+
+// Private source operations; callers never query this module's tables directly.
+export async function readContact(db, id) {
+  const row = await db.prepare('SELECT contact_id, created_at, summary, intent, what_you_need_from_human, agent_identity, operator, reply_to, found_via, previous_contact_id, self_reported_test FROM contacts WHERE contact_id = ?').bind(id).first();
+  return row ? { ...row, source_type: 'contact', source_id: row.contact_id } : null;
+}
+export async function contactSourceVersion(db) {
+  const row = await db.prepare('SELECT COALESCE(MAX(rowid), 0) AS watermark, COUNT(*) AS count FROM contacts').first();
+  return [row.watermark, row.count];
+}
+export async function listContactSources(db, { before, includeTests = false, limit = 51 } = {}) {
+  const where = ['(? = 1 OR self_reported_test = 0)'];
+  const args = [includeTests ? 1 : 0];
+  if (before) {
+    where.push('(created_at < ? OR (created_at = ? AND contact_id < ?))');
+    args.push(before.time, before.time, before.id);
+  }
+  const rows = (await db.prepare("SELECT contact_id AS source_id, created_at, substr(summary, 1, 300) AS summary, self_reported_test FROM contacts WHERE "
+    + where.join(' AND ') + ' ORDER BY created_at DESC, contact_id DESC LIMIT ?').bind(...args, limit).all()).results;
+  return rows.map(row => ({ ...row, source_type: 'contact' }));
+}

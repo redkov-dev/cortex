@@ -5,7 +5,7 @@ function shortText(value, limit) {
     .slice(0, limit).join('');
 }
 
-export function notificationText(row, source, preview = 'summary') {
+export function notificationText(row, source, preview = 'summary', ownerEnabled = false) {
   if (row.source_type === 'admin_test') {
     return `MAGNT · ТЕСТ уведомлений\nПроверка личного Telegram-канала. Это не внешнее обращение.\nСобытие: ${row.notification_id}`;
   }
@@ -18,12 +18,16 @@ export function notificationText(row, source, preview = 'summary') {
     if (preview === 'summary') lines.push(`Цель: «${shortText(source.goal, 1000)}»`);
     lines.push('Получена при поиске опыта.',
       `Наблюдение: ${source.observation_id}`, `Событие: ${row.notification_id}`);
+    if (ownerEnabled) lines.push(`В ChatGPT с MAGNT Owner: открой цель ${source.observation_id}.`);
     return lines.join('\n');
   }
   const lines = ['MAGNT · новое обращение', `${time} МСК`, `Контакт: ${source.contact_id}`];
   if (preview === 'summary') lines.push(`Сообщение: «${shortText(source.summary, 300)}»`);
-  lines.push('Обращение сохранено. Полный текст — в D1, таблица contacts, по ID контакта.',
-    'Ответ из ChatGPT пока не подключён.', `Событие: ${row.notification_id}`);
+  if (ownerEnabled) lines.push(`В ChatGPT с MAGNT Owner: открой обращение ${source.contact_id}.`,
+    'Можно сохранить частный черновик. Публикация ответа пока недоступна.');
+  else lines.push('Обращение сохранено. Полный текст — в D1, таблица contacts, по ID контакта.',
+    'Ответ из ChatGPT пока не подключён.');
+  lines.push(`Событие: ${row.notification_id}`);
   return lines.join('\n');
 }
 

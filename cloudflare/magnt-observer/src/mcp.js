@@ -6,7 +6,7 @@ import { profile, SERVER_CARD, SERVER_INFO } from "./profile.js";
 import { searchSignals, saveSignal } from "./task-signals.js";
 import { saveObservedSignal } from "./observe-task.js";
 
-const MAX_BODY_BYTES = 24 * 1024;
+import { readBody, structuredResult } from "./mcp-transport.js";
 const METHODS = new Set([
   "initialize", "notifications/initialized", "server/discover", "ping",
   "tools/list", "tools/call", "resources/list", "resources/read",
@@ -14,9 +14,6 @@ const METHODS = new Set([
 ]);
 const TOOLS = new Set(Object.keys(TOOL_SCHEMAS));
 
-function structuredResult(value, isError = false) {
-  return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, ...(isError && { isError }) };
-}
 
 function createServer(env, event) {
   const server = new McpServer(SERVER_INFO, {
@@ -150,27 +147,6 @@ function observeEnvelope(body, request, event) {
   if (body.method === "resources/read") event.resource_name = body.params?.uri === "magnt://profile" ? "magnt://profile" : "unknown";
 }
 
-async function readBody(request) {
-  if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) return null;
-  const reader = request.body?.getReader();
-  if (!reader) return new Uint8Array();
-  const chunks = [];
-  let length = 0;
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    length += value.byteLength;
-    if (length > MAX_BODY_BYTES) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  return bytes;
-}
 
 async function observeResponse(response, event) {
   const isSse = response.headers.get("content-type")?.includes("text/event-stream");

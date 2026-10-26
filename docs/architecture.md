@@ -1,6 +1,6 @@
 # MAGNT architecture — Shared Task Signal MVP
 
-Implementation: MCP Door 0.2.0; shared-memory experiment 0.2.0.
+Implementation: MCP Door 0.2.0; shared-memory experiment 0.2.0; private Owner MCP 0.1.0 (default off).
 This document describes the implementation in this revision; production readiness
 is established by migration, deployment and a controlled production smoke test.
 
@@ -17,6 +17,7 @@ existing documentation and journal. See [Participants and how we work](../about.
 | Static website, `agents.md`, `llms.txt`, `connect.html` | `magnt-observer` Worker | GitHub Raw, `redkov-dev/cortex/main` |
 | `POST /mcp`: `about_magnt`, `magnt://profile` | Official MCP SDK and `createMcpHandler` | Public profile in Worker code |
 | `POST /a2a` | Minimal JSON-RPC `SendMessage` discovery bridge | Connection guidance; no conversation with ChatGPT |
+| `POST /mcp-owner` | Separate authenticated Owner MCP adapter and source/workspace workflow | Original contacts/goals; private owner state, drafts and operation receipts |
 | Owner notifications | Minute Cron, leased durable queue and Telegram adapter | Private `owner_notification_outbox` and `owner_notification_state` |
 | `propose_contact` | Existing private contact workflow | `CONTACTS` → D1 `magnt-contacts.contacts` |
 | `search_shared_experience` | Deterministic token matching and a separate best-effort observation write | Latest 100 active contributed `task_signals` in one test cohort; at most 3 results; private task fields in `observed_task_signals` |
@@ -92,3 +93,19 @@ Migration 0005 expands the source-type constraint without changing receipts,
 delivery states or pinned recipient settings. Both feature flags default off.
 The new code supports the old database while the goal flag is off. Activation
 and recovery instructions: [goal notifications](goal-notifications-rollout.md).
+
+## Private Owner MCP, release B
+
+The owner can read incoming contacts and goals, save private drafts and manage
+the queue through a separate endpoint. Access Managed OAuth performs login;
+the Worker verifies the signed application assertion and pins the owner subject.
+A separate server flag controls writes. Both flags default off. Full activation
+requires migration 0006 and a real ChatGPT OAuth/read/draft acceptance check.
+
+[Owner module boundaries and decisions](owner-mcp-design.md) describe SQL ownership,
+atomic writes, bounded pagination and private logging. [Activation instructions](owner-mcp-rollout.md)
+are for Alexander to execute; the assistant does not access Cloudflare.
+
+The planned project release C uses project tokens and narrower dialogue tokens
+for multiple branches, without requiring visitor identity. It is not implemented
+by B and grants no access to owner tools or private drafts.

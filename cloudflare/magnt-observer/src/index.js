@@ -1,3 +1,4 @@
+import { handleOwnerMcp, isOwnerPrivatePath } from "./owner-mcp.js";
 import { handleMcp } from "./mcp.js";
 import { handleA2A } from "./a2a.js";
 import { SERVER_INFO } from "./profile.js";
@@ -85,11 +86,14 @@ export default {
     const ua = (request.headers.get("user-agent") || "").slice(0, 1000);
     const isMcp = url.pathname === "/mcp" || url.pathname.startsWith("/mcp/") || url.pathname === "/.well-known/mcp/server-card.json";
     const isA2A = url.pathname === "/a2a" || url.pathname === "/.well-known/agent-card.json" || url.pathname === "/.well-known/agent.json";
-    const isMachineEndpoint = isMcp || isA2A;
+    const isOwner = isOwnerPrivatePath(url.pathname);
+    const isMachineEndpoint = isMcp || isA2A || isOwner;
     const referrer = isMachineEndpoint ? "" : (request.headers.get("referer") || "").slice(0, 1000);
     const client = classifyClient(ua);
 
-    const event = {
+    const event = isOwner ? {
+      time: new Date().toISOString(), event_id: crypto.randomUUID(), method: request.method, path: "/mcp-owner",
+    } : {
       time: new Date().toISOString(),
       event_id: crypto.randomUUID(),
       method: request.method,
@@ -113,14 +117,14 @@ export default {
       return response;
     } catch {
       event.outcome = "internal_error";
-      response = new Response("Service temporarily unavailable", { status: 503 });
+      response = new Response("Service temporarily unavailable", { status: 503, headers: { "cache-control": "no-store" } });
       return response;
     } finally {
       event.status = response?.status ?? 503;
       event.duration_ms = Date.now() - started;
       event.outcome ??= event.status < 400 ? "http_success" : "http_error";
       console.log(JSON.stringify(event));
-      if (env.ANALYTICS) {
+      if (env.ANALYTICS && !isOwner) {
         try {
           env.ANALYTICS.writeDataPoint({
             blobs: [url.pathname, request.method, client.kind, client.name, ua, referrer, cf.country || "", cf.city || "", String(cf.asn || ""), cf.colo || ""],
@@ -134,6 +138,9 @@ export default {
 };
 
 async function routeRequest(request, env, ctx, event, url) {
+  const ownerResponse = await handleOwnerMcp(request, env, ctx, event);
+  if (ownerResponse) return ownerResponse;
+
   const mcpResponse = await handleMcp(request, env, ctx, event);
   if (mcpResponse) return mcpResponse;
 
