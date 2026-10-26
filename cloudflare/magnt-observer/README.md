@@ -15,7 +15,7 @@ MAGNT's richer MCP capabilities.
 | A2A discovery | Agent Card at `/.well-known/agent-card.json`; compatibility copy at `/.well-known/agent.json`; minimal JSON-RPC bridge at `POST /a2a` |
 | Profile | MCP resource `magnt://profile` and tool `about_magnt` |
 | First contact | Tool `propose_contact` saves to private Cloudflare D1 |
-| Owner notifications | Optional minute Cron discovers saved contacts and delivers a durable private Telegram outbox |
+| Owner notifications | Optional minute Cron delivers saved contacts and newly queued search goals through one private Telegram outbox |
 | Shared task signals | `search_shared_experience` searches contributed experience and privately observes its minimal task; `contribute_task_signal` explicitly publishes shared content |
 | MCP discovery | `/mcp/server-card`, alias `/.well-known/mcp/server-card.json` |
 | Request telemetry | Cloudflare Workers Logs; optional existing Analytics Engine binding |
@@ -98,7 +98,7 @@ latest-100 window.
 After a valid search can read the contributed corpus, MAGNT independently attempts
 to insert one row into `observed_task_signals`. It stores only:
 
-- an opaque random `observation_id` used inside the table;
+- an opaque random `observation_id`, also used as the private notification source reference when enabled;
 - `created_at`;
 - `goal`, optional `blocker` and `tried` exactly as validated for the tool;
 - a test flag set when `is_test=true` or the request uses the controlled-test
@@ -120,8 +120,12 @@ only `observed_task_saved: false`.
 
 Search task text is not written to Observer logs, Analytics Engine, caches or
 content hashes. Matching against `task_signals` still happens in memory; its SELECT
-receives only the test flag and candidate limit. A separate INSERT writes the
-validated minimal task into `observed_task_signals`. Responses use
+receives only the test flag and candidate limit. The `observe-task.js` workflow writes the validated task through `observations.js`.
+When `TELEGRAM_GOAL_NOTIFICATIONS_ENABLED=true`, a non-test observation and its
+`notification-queue.js` outbox insert commit in one D1 batch. The best-effort write
+rolls back as a whole if either insert fails; shared search still returns its result.
+The Telegram adapter owns message formatting and network calls. See
+[goal notification activation](../../docs/goal-notifications-rollout.md). Responses use
 `Cache-Control: no-store`.
 
 Only `contribute_task_signal` stores **shared** content. This does not directly

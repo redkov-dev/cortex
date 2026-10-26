@@ -17,6 +17,7 @@ existing documentation and journal. See [Participants and how we work](../about.
 | Static website, `agents.md`, `llms.txt`, `connect.html` | `magnt-observer` Worker | GitHub Raw, `redkov-dev/cortex/main` |
 | `POST /mcp`: `about_magnt`, `magnt://profile` | Official MCP SDK and `createMcpHandler` | Public profile in Worker code |
 | `POST /a2a` | Minimal JSON-RPC `SendMessage` discovery bridge | Connection guidance; no conversation with ChatGPT |
+| Owner notifications | Minute Cron, leased durable queue and Telegram adapter | Private `owner_notification_outbox` and `owner_notification_state` |
 | `propose_contact` | Existing private contact workflow | `CONTACTS` → D1 `magnt-contacts.contacts` |
 | `search_shared_experience` | Deterministic token matching and a separate best-effort observation write | Latest 100 active contributed `task_signals` in one test cohort; at most 3 results; private task fields in `observed_task_signals` |
 | `contribute_task_signal` | Explicit validated write, retry-safe receipt | `CONTACTS` → D1 `magnt-contacts.task_signals` |
@@ -40,7 +41,7 @@ can still permit coarse correlation. Repeated calls are separate observations.
 The observation is marked as a test when `is_test=true` or the request has the
 controlled-test User-Agent, without changing which contributed corpus is searched.
 Observation failure does not break shared search. Its SELECT uses only numeric
-cohort/limit parameters and performs matching in memory; its separate INSERT
+cohort/limit parameters and performs matching in memory; the separate observation workflow
 stores the task fields. Search text is not hashed or logged.
 
 Observer retains transport metadata and records allowlisted method/tool names,
@@ -58,3 +59,36 @@ separate from the historical `gateway/` prototype. The collaboration description
 adds no cloud resource, LLM, embeddings, OAuth or automated outreach. Apply
 migrations 0002 and 0003 before considering shared-memory v0.2 fully deployed.
 Verify observation writes in private D1 separately from the public MCP smoke test.
+
+## Private goal notifications
+
+The optional extension requires migration 0005 and
+`TELEGRAM_GOAL_NOTIFICATIONS_ENABLED=true`. `observe-task.js` composes prepared
+operations from `observations.js` and `notification-queue.js`: a non-test observation
+and its `observed_goal` outbox entry commit atomically. The modules own their
+respective SQL. Search only awaits the D1 transaction, never Telegram; failure of
+the observation transaction leaves the shared-search response intact.
+
+Only new observations made while the feature is enabled enter the queue. Old
+observations are not scanned or backfilled. `is_test` and controlled-client markers
+exclude tests. Repeated searches are separate observations; no caller identity is
+inferred. Shared contributions alone do not create goal notifications.
+
+The existing scheduled dispatcher reads goals through `readObservedGoal` and
+shares its lease, retry budget and channel backoff across contacts and goals.
+Contacts and administrative tests take priority over goals. `telegram-notifications.js`
+owns formatting and Telegram HTTP. Summary mode includes the entire validated
+goal (at most 1000 characters); metadata-only mode omits it. Neither optional
+blocker/tried fields nor network identities are forwarded. A random notification
+ID avoids exposing the observation ID through delivery logs.
+
+Goal capture/enqueue and goal delivery have an explicit feature flag. Turning it
+off leaves queued goals pending while contacts keep working. The global
+`TELEGRAM_NOTIFICATIONS_ENABLED` flag pauses all delivery; with goal capture enabled,
+new goals still queue for delivery after resumption. Existing contact discovery
+continues to use its original persistent NOTIFY_FROM cutoff.
+
+Migration 0005 expands the source-type constraint without changing receipts,
+delivery states or pinned recipient settings. Both feature flags default off.
+The new code supports the old database while the goal flag is off. Activation
+and recovery instructions: [goal notifications](goal-notifications-rollout.md).

@@ -57,25 +57,6 @@ export async function searchSignals(db, input) {
   return result.results.length ? rankSignals(input, result.results) : [];
 }
 
-export async function saveObservedSignal(db, input) {
-  if (!db) throw new Error("Storage unavailable");
-  const observationId = `ots_${crypto.randomUUID()}`;
-  const result = await db.prepare(`
-    INSERT INTO observed_task_signals (
-      observation_id, created_at, goal, blocker, tried, self_reported_test
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `).bind(
-    observationId,
-    new Date().toISOString(),
-    input.goal,
-    input.blocker ?? null,
-    input.tried ?? null,
-    input.is_test === true ? 1 : 0,
-  ).run();
-  if (!result.success) throw new Error("Write not confirmed");
-  return { observation_id: observationId };
-}
-
 async function hashContent(value) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
