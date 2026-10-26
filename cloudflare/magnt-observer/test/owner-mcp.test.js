@@ -1,0 +1,291 @@
+import assert from 'node:assert/strict';
+import { readFile, readdir } from 'node:fs/promises';
+import test from 'node:test';
+import { Miniflare } from 'miniflare';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { Client as LegacyClient } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport as LegacyTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { notificationText } from '../src/telegram-notifications.js';
+
+const keys = await generateKeyPair('RS256');
+const jwk = { ...await exportJWK(keys.publicKey), kid: 'test-owner-key', alg: 'RS256', use: 'sig' };
+const settings = { OWNER_MCP_ENABLED: 'true', OWNER_MCP_WRITE_ENABLED: 'true',
+  OWNER_ACCESS_ISSUER: 'https://magnt-test.cloudflareaccess.com', OWNER_ACCESS_AUD: 'a'.repeat(64), OWNER_ACCESS_SUB: 'owner-test-subject' };
+async function jwt(claims = {}, header = {}) {
+  return new SignJWT({ type: 'app', iss: settings.OWNER_ACCESS_ISSUER, aud: [settings.OWNER_ACCESS_AUD],
+    sub: settings.OWNER_ACCESS_SUB, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 900, ...claims })
+    .setProtectedHeader({ alg: 'RS256', kid: jwk.kid, ...header }).sign(keys.privateKey);
+}
+const assertion = await jwt();
+const meta = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+  'io.modelcontextprotocol/clientInfo': { name: 'owner-integration-test', version: '0.1.0' },
+  'io.modelcontextprotocol/clientCapabilities': {} };
+async function fixture(t, { overrides = {}, through = 6 } = {}) {
+  const modules = {};
+  for (const file of (await readdir(process.env.MAGNT_TEST_BUNDLE ?? 'dist')).filter(n => n.endsWith('.js') || n.endsWith('.sql'))) {
+    modules[file] = { type: file.endsWith('.sql') ? 'text' : 'esm', contents: await readFile((process.env.MAGNT_TEST_BUNDLE ?? 'dist') + '/' + file, 'utf8') };
+  }
+  // Miniflare's network bridge rewrites Host to loopback; restore the edge's
+  // URL/Host pairing before invoking the unchanged production Worker.
+  modules['test-entry.js'] = { type: 'esm', contents: `import worker from './index.js';
+    export default { ...worker, fetch(request, env, ctx) {
+      const headers = new Headers(request.headers); headers.set('host', new URL(request.url).host);
+      return worker.fetch(new Request(request, { headers }), env, ctx);
+    } };` };
+  const logs = [], requests = [];
+  const bindings = { ...settings, ...overrides };
+  const mf = new Miniflare({ cf: false, logRequests: false, telemetry: { enabled: false },
+    handleStructuredLogs: entry => logs.push(entry), workers: [{ config: { name: 'owner-mcp-test',
+      compatibilityDate: '2026-09-23', compatibilityFlags: ['nodejs_compat'], manifest: { mainModule: 'test-entry.js', modules },
+      env: { CONTACTS: { type: 'd1', id: crypto.randomUUID() },
+        ...Object.fromEntries(Object.entries(bindings).filter(([,v]) => v !== undefined).map(([k, value]) => [k, { type: 'text', value }])) },
+    }, dev: { outboundService: { type: 'fetcher', handler: async request => {
+      requests.push(request.url);
+      assert.equal(request.url, settings.OWNER_ACCESS_ISSUER + '/cdn-cgi/access/certs');
+      return Response.json({ keys: [jwk] });
+    } } } }] });
+  t.after(() => mf.dispose());
+  const db = await mf.getD1Database('CONTACTS');
+  for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql') && Number(n.slice(0,4)) <= through).sort()) {
+    const sql = (await readFile('migrations/' + name, 'utf8')).replace(/--[^\n]*/g, '');
+    await db.batch(sql.split(';').filter(s => s.trim()).map(s => db.prepare(s)));
+  }
+  const worker = await mf.getWorker();
+  const fetchWorker = (url, init) => worker.fetch(String(url), init);
+  const raw = (method, params = {}, { token = assertion, path = '/mcp-owner', headers = {} } = {}) => fetchWorker('https://magnt.ru' + path, {
+    method: 'POST', headers: { host: 'magnt.ru', 'content-type': 'application/json', accept: 'application/json, text/event-stream',
+      'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': method, ...(method === 'tools/call' ? { 'Mcp-Name': params.name } : {}), ...(token ? { 'Cf-Access-Jwt-Assertion': token } : {}), ...headers },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { ...params, _meta: meta } }),
+  });
+  const call = async (name, args = {}, options) => {
+    const response = await raw('tools/call', { name, arguments: args }, options);
+    const text = await response.text();
+    assert.equal(response.status, 200, text);
+    const body = JSON.parse(text);
+    assert.ok(body.result, text);
+    return { ...body.result, value: body.result.structuredContent, size: new TextEncoder().encode(text).byteLength };
+  };
+  return { mf, db, raw, call, logs, requests, fetchWorker };
+}
+async function seed(f, { type = 'contact', text = 'Private input', isTest = false, time = '2026-10-20T10:00:00.000Z' } = {}) {
+  const id = (type === 'contact' ? 'mc_' : 'ots_') + crypto.randomUUID();
+  if (type === 'contact') await f.db.prepare('INSERT INTO contacts (contact_id, created_at, summary, reply_to, previous_contact_id, submission_id, payload_hash, self_reported_test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, time, text, 'claimed-address@example.test', 'mc_' + crypto.randomUUID(), crypto.randomUUID(), 'test', isTest ? 1 : 0).run();
+  else await f.db.prepare('INSERT INTO observed_task_signals (observation_id, created_at, goal, blocker, tried, self_reported_test) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(id, time, text, 'PRIVATE_BLOCKER', 'PRIVATE_TRIED', isTest ? 1 : 0).run();
+  return { id, conversation_id: 'oc_' + id, incoming: 'in_' + id };
+}
+const write = (source, body = 'Private draft', revision = 1) => ({ conversation_id: source.conversation_id,
+  body, mode: 'draft', expected_revision: revision, submission_id: crypto.randomUUID() });
+const update = (source, action, revision, extra = {}) => ({ conversation_id: source.conversation_id,
+  action, expected_revision: revision, submission_id: crypto.randomUUID(), ...extra });
+const count = async (f, table) => (await f.db.prepare('SELECT COUNT(*) AS n FROM ' + table).first()).n;
+
+test('owner auth validates signatures, application audience, expiry and pinned subject; public tools remain separate', { timeout: 60000 }, async t => {
+  const f = await fixture(t);
+  assert.equal((await f.raw('tools/list', {}, { token: null })).status, 401);
+  assert.equal((await f.raw('tools/list', {}, { headers: { origin: 'https://attacker.example' } })).status, 403);
+  for (const claims of [{ iss: 'https://attacker.example' }, { aud: ['another-app'] },
+    { exp: Math.floor(Date.now()/1000)-10 }, { iat: Math.floor(Date.now()/1000)+600 }, { type: 'service' }, { sub: undefined }]) {
+    assert.equal((await f.raw('tools/list', {}, { token: await jwt(claims) })).status, 401);
+  }
+  assert.equal((await f.raw('tools/list', {}, { token: await jwt({ sub: 'other-user', email: 'owner@example.test' }) })).status, 403);
+  const tampered = assertion.slice(0, -10) + '1234567890';
+  assert.equal((await f.raw('tools/list', {}, { token: tampered })).status, 401);
+  const tools = (await (await f.raw('tools/list')).json()).result.tools;
+  assert.deepEqual(tools.map(x => x.name).sort(), ['list_inbox', 'read_conversation', 'update_inbox', 'write_reply']);
+  assert.equal(tools.find(x => x.name === 'list_inbox').annotations.readOnlyHint, true);
+  assert.equal(tools.find(x => x.name === 'write_reply').annotations.readOnlyHint, false);
+  assert.deepEqual(tools[0]._meta.securitySchemes, [{ type: 'oauth2' }]);
+  const publicTools = (await (await f.raw('tools/list', {}, { token: null, path: '/mcp' })).json()).result.tools;
+  assert.deepEqual(publicTools.map(x => x.name).sort(), ['about_magnt', 'contribute_task_signal', 'propose_contact', 'search_shared_experience']);
+  assert.ok(f.requests.every(url => url === settings.OWNER_ACCESS_ISSUER + '/cdn-cgi/access/certs'));
+});
+
+test('disabled, incomplete and read-only configurations fail closed; bootstrap reveals only caller identity', { timeout: 60000 }, async t => {
+  for (const overrides of [{ OWNER_MCP_ENABLED: 'false' }, { OWNER_ACCESS_SUB: undefined }, { OWNER_ACCESS_ISSUER: 'https://evil.example' }]) {
+    const f = await fixture(t, { overrides });
+    assert.equal((await f.raw('tools/list')).status, 503);
+    assert.equal((await (await f.raw('tools/list', {}, { path: '/mcp' })).json()).result.tools.length, 4);
+  }
+  const f = await fixture(t, { overrides: { OWNER_ACCESS_SUB: undefined, OWNER_MCP_ENABLED: 'false' } });
+  const identity = await f.mf.dispatchFetch('https://magnt.ru/mcp-owner/identity', { headers: { 'Cf-Access-Jwt-Assertion': assertion } });
+  assert.equal(identity.status, 200); assert.equal((await identity.json()).subject, settings.OWNER_ACCESS_SUB);
+  assert.equal((await f.mf.dispatchFetch('https://magnt.ru/mcp-owner/identity')).status, 401);
+  const readOnly = await fixture(t, { overrides: { OWNER_MCP_WRITE_ENABLED: 'false' } });
+  const source = await seed(readOnly);
+  assert.equal((await readOnly.call('read_conversation', { reference: source.id })).value.can_draft, false);
+  assert.equal((await readOnly.call('write_reply', write(source))).value.code, 'forbidden');
+  assert.equal(await count(readOnly, 'owner_operations'), 0);
+});
+
+test('owner reads original contacts and observed goals without copying content or changing inbox state', { timeout: 60000 }, async t => {
+  const f = await fixture(t);
+  const contact = await seed(f, { text: 'PRIVATE_CONTACT_SENTINEL' });
+  const goal = await seed(f, { type: 'observation', text: 'PRIVATE_GOAL_SENTINEL' });
+  await seed(f, { isTest: true });
+  const inbox = (await f.call('list_inbox')).value;
+  assert.equal(inbox.items.length, 2); assert.equal(inbox.has_more, false);
+  assert.ok(inbox.items.every(x => !x.is_test && x.has_new_incoming && !x.can_publish));
+  assert.ok(!JSON.stringify(inbox).includes('claimed-address@example.test'));
+  assert.equal((await f.call('list_inbox', { include_tests: true })).value.items.length, 3);
+  assert.equal((await f.call('list_inbox', { source: 'observation' })).value.items.length, 1);
+  const full = (await f.call('read_conversation', { reference: contact.id })).value;
+  assert.equal(full.events[0].content.reply_to, 'claimed-address@example.test');
+  assert.equal(full.reply_channel, 'unavailable');
+  const observed = (await f.call('read_conversation', { reference: goal.conversation_id })).value;
+  assert.equal(observed.events[0].content.blocker, 'PRIVATE_BLOCKER');
+  assert.equal(observed.events[0].content.tried, 'PRIVATE_TRIED');
+  assert.equal(observed.source_type, 'observation'); assert.equal(observed.events[0].identity_verified, false);
+  assert.equal(await count(f, 'owner_inbox'), 0); assert.equal(await count(f, 'owner_replies'), 0);
+  const published = await f.call('write_reply', { ...write(contact), mode: 'publish' });
+  assert.equal(published.value.code, 'reply_channel_unavailable');
+  assert.equal(await count(f, 'owner_inbox'), 0);
+  assert.equal(await count(f, 'task_signals'), 0);
+});
+
+test('drafts survive new clients; exact retries are idempotent and conflicting concurrent edits are rejected', { timeout: 60000 }, async t => {
+  const f = await fixture(t); const source = await seed(f);
+  const input = write(source, 'PRIVATE_DRAFT_SENTINEL');
+  const duplicates = await Promise.all([f.call('write_reply', input), f.call('write_reply', input)]);
+  assert.deepEqual(duplicates[0].value, duplicates[1].value);
+  assert.equal(duplicates[0].value.status, 'draft_saved');
+  assert.equal(await count(f, 'owner_replies'), 1); assert.equal(await count(f, 'owner_operations'), 1);
+  assert.equal((await f.call('write_reply', { ...input, body: 'Changed' })).value.code, 'submission_conflict');
+  assert.equal((await f.call('write_reply', write(source))).value.code, 'revision_conflict');
+  const legacy = new LegacyClient({ name: 'owner-second-client', version: '0.1.0' });
+  try {
+    await legacy.connect(new LegacyTransport(new URL('https://magnt.ru/mcp-owner'), { requestInit: { headers: { host: 'magnt.ru', 'Cf-Access-Jwt-Assertion': assertion } }, fetch: f.fetchWorker }));
+    const read = (await legacy.callTool({ name: 'read_conversation', arguments: { reference: source.id } })).structuredContent;
+    assert.equal(read.events[1].body, input.body); assert.equal(read.revision, 2);
+  } finally { await legacy.close(); }
+  const edits = await Promise.all(['First edit', 'Second edit'].map(body => f.call('write_reply', {
+    ...write(source, body, 2), reply_id: duplicates[0].value.reply_id })));
+  assert.equal(edits.filter(x => x.value.status === 'draft_saved').length, 1);
+  assert.equal(edits.filter(x => x.value.code === 'revision_conflict').length, 1);
+  assert.equal(await count(f, 'owner_replies'), 1);
+  assert.equal((await f.call('write_reply', input)).value.reply_id, duplicates[0].value.reply_id);
+  assert.equal((await f.raw('tools/call', { name: 'write_reply', arguments: input }, { token: await jwt({ sub: 'other-user' }) })).status, 403);
+  const other = await seed(f);
+  assert.equal((await f.call('write_reply', { ...write(other), reply_id: duplicates[0].value.reply_id })).value.code, 'reply_not_found');
+});
+
+test('acknowledgement, archive and restore are explicit; drafts do not acknowledge incoming content', { timeout: 60000 }, async t => {
+  const f = await fixture(t); const source = await seed(f);
+  await f.call('write_reply', write(source));
+  assert.equal((await f.call('list_inbox')).value.items.length, 1);
+  assert.equal((await f.call('update_inbox', update(source, 'acknowledge', 2))).value.code, 'invalid_arguments');
+  const acknowledge = update(source, 'acknowledge', 2, { through_event_id: source.incoming });
+  assert.equal((await f.call('update_inbox', acknowledge)).value.revision, 3);
+  assert.equal((await f.call('list_inbox')).value.items.length, 0);
+  assert.equal((await f.call('update_inbox', update(source, 'archive', 3))).value.revision, 4);
+  assert.equal((await f.call('list_inbox', { view: 'archived' })).value.items[0].conversation_id, source.conversation_id);
+  assert.equal((await f.call('update_inbox', update(source, 'restore', 4))).value.revision, 5);
+  assert.equal((await f.call('list_inbox', { view: 'all' })).value.items[0].archived, false);
+  assert.equal((await f.call('update_inbox', acknowledge)).value.revision, 3);
+  assert.equal(await count(f, 'contacts'), 1);
+  const next = await seed(f);
+  await f.db.prepare('UPDATE contacts SET previous_contact_id = ? WHERE contact_id = ?').bind(source.id, next.id).run();
+  assert.equal((await f.call('list_inbox')).value.items[0].conversation_id, next.conversation_id);
+});
+
+test('D1 failure rolls back revision, draft and receipt together and never breaks public contact intake', { timeout: 60000 }, async t => {
+  const f = await fixture(t); const source = await seed(f);
+  await f.db.prepare("CREATE TRIGGER reject_draft BEFORE INSERT ON owner_replies BEGIN SELECT RAISE(ABORT, 'PRIVATE_DB_ERROR'); END").run();
+  const input = write(source);
+  assert.equal((await f.call('write_reply', input)).value.code, 'storage_unavailable');
+  assert.equal(await count(f, 'owner_inbox'), 0); assert.equal(await count(f, 'owner_operations'), 0);
+  assert.equal((await f.db.prepare('SELECT revision FROM owner_workspace_state').first()).revision, 1);
+  await f.db.prepare('DROP TRIGGER reject_draft').run();
+  assert.equal((await f.call('write_reply', input)).value.status, 'draft_saved');
+  const oldSchema = await fixture(t, { through: 5 });
+  assert.equal((await oldSchema.call('list_inbox')).value.code, 'storage_unavailable');
+  const publicCall = await oldSchema.raw('tools/call', { name: 'propose_contact', arguments: { summary: 'Public intake survives missing owner migration', is_test: true } }, { path: '/mcp', token: null });
+  assert.equal((await publicCall.json()).result.structuredContent.status, 'accepted_for_human_review');
+});
+
+test('inbox pagination scans archived records without omissions and detects changed snapshots', { timeout: 60000 }, async t => {
+  const f = await fixture(t); const wanted = [];
+  for (let i = 0; i < 65; i++) {
+    const source = await seed(f, { type: i % 2 ? 'contact' : 'observation', text: 'Entry ' + i }); wanted.push(source.conversation_id);
+    if (i < 55) await f.db.prepare('INSERT INTO owner_inbox (conversation_id, source_type, source_id, archived) VALUES (?, ?, ?, 1)')
+      .bind(source.conversation_id, i % 2 ? 'contact' : 'observation', source.id).run();
+  }
+  let cursor, seen = [];
+  do {
+    const result = (await f.call('list_inbox', { view: 'all', limit: 7, ...(cursor ? { cursor } : {}) })).value;
+    assert.equal(result.status, 'inbox'); seen.push(...result.items.map(x => x.conversation_id)); cursor = result.next_cursor;
+  } while (cursor);
+  assert.equal(new Set(seen).size, 65); assert.deepEqual(seen.slice().sort(), wanted.sort());
+  cursor = undefined; seen = [];
+  do {
+    const result = (await f.call('list_inbox', { limit: 7, ...(cursor ? { cursor } : {}) })).value;
+    seen.push(...result.items.map(x => x.conversation_id)); cursor = result.next_cursor;
+  } while (cursor);
+  assert.equal(new Set(seen).size, 10);
+  const before = (await f.call('list_inbox', { view: 'all', limit: 2 })).value;
+  await seed(f);
+  assert.equal((await f.call('list_inbox', { view: 'all', limit: 2, cursor: before.next_cursor })).value.code, 'invalid_cursor');
+  const beforeEdit = (await f.call('list_inbox', { view: 'all', limit: 2 })).value;
+  await f.call('write_reply', write({ conversation_id: beforeEdit.items[0].conversation_id }));
+  assert.equal((await f.call('list_inbox', { view: 'all', limit: 2, cursor: beforeEdit.next_cursor })).value.code, 'invalid_cursor');
+  assert.equal((await f.call('list_inbox', { cursor: 'not-a-cursor' })).value.code, 'invalid_cursor');
+});
+
+test('large inbox pages stay under 64 KiB without skipping shortened-page candidates', { timeout: 60000 }, async t => {
+  const f = await fixture(t); const expected = [];
+  for (let i = 0; i < 60; i++) expected.push((await seed(f, { text: '語'.repeat(4000) })).conversation_id);
+  const actual = []; let cursor;
+  do {
+    const response = await f.call('list_inbox', { view: 'all', limit: 50, ...(cursor ? { cursor } : {}) });
+    assert.ok(response.size <= 65536, String(response.size));
+    actual.push(...response.value.items.map(item => item.conversation_id)); cursor = response.value.next_cursor;
+  } while (cursor);
+  assert.equal(new Set(actual).size, 60); assert.deepEqual(actual.sort(), expected.sort());
+});
+
+test('Telegram next step refers to private Owner reading only when enabled, preserving metadata-only mode', () => {
+  for (const type of ['contact', 'observed_goal']) {
+    const row = { source_type: type, notification_id: 'test' };
+    const source = { contact_id: 'mc_test', observation_id: 'ots_test', created_at: '2026-10-26T10:00:00Z', summary: 'PRIVATE_BODY', goal: 'PRIVATE_BODY' };
+    const enabled = notificationText(row, source, 'metadata_only', true);
+    assert.ok(enabled.includes('MAGNT Owner')); assert.ok(!enabled.includes('PRIVATE_BODY'));
+    assert.ok(!notificationText(row, source, 'metadata_only', false).includes('с MAGNT Owner'));
+  }
+});
+
+test('long private draft history is paged under 64 KiB and cursor cannot cross conversations or revisions', { timeout: 60000 }, async t => {
+  const f = await fixture(t); const source = await seed(f, { text: '源'.repeat(3000) });
+  for (let i = 1; i <= 8; i++) assert.equal((await f.call('write_reply', write(source, String(i) + '字'.repeat(7999), i))).value.status, 'draft_saved');
+  let cursor, seen = [], firstCursor;
+  do {
+    const read = await f.call('read_conversation', { reference: source.id, limit: 50, ...(cursor ? { cursor } : {}) });
+    assert.ok(read.size <= 65536, String(read.size)); assert.equal(read.value.status, 'conversation');
+    seen.push(...read.value.events.map(e => e.event_id));
+    firstCursor ??= read.value.next_cursor;
+    cursor = read.value.has_more ? read.value.next_cursor : null;
+  } while (cursor);
+  assert.equal(new Set(seen).size, 9);
+  const other = await seed(f);
+  assert.equal((await f.call('read_conversation', { reference: other.id, cursor: firstCursor })).value.code, 'invalid_cursor');
+  await f.call('write_reply', write(source, 'Another draft', 9));
+  assert.equal((await f.call('read_conversation', { reference: source.id, cursor: firstCursor })).value.code, 'invalid_cursor');
+});
+
+test('private route logs never contain source text, credentials, query, referrer, client metadata or validation values', { timeout: 60000 }, async t => {
+  const f = await fixture(t); const source = await seed(f, { text: 'PRIVATE_CONTENT_SENTINEL' });
+  await f.call('read_conversation', { reference: source.id }, { path: '/mcp-owner?code=PRIVATE_QUERY',
+    headers: { referer: 'https://example.test/PRIVATE_REFERRER', 'user-agent': 'PRIVATE_UA' } });
+  await f.call('write_reply', write(source, 'PRIVATE_DRAFT_SENTINEL'));
+  assert.equal((await f.call('list_inbox', { PRIVATE_EXTRA_FIELD: 'PRIVATE_EXTRA_VALUE' })).value.code, 'invalid_arguments');
+  const reserved = await f.mf.dispatchFetch('https://magnt.ru/.well-known/oauth-not-configured?token=PRIVATE_QUERY');
+  assert.equal(reserved.status, 404); assert.equal(reserved.headers.get('cache-control'), 'no-store');
+  const wrongHost = await f.mf.dispatchFetch('https://www.magnt.ru/mcp-owner', { headers: { 'Cf-Access-Jwt-Assertion': assertion } });
+  assert.equal(wrongHost.status, 404);
+  const oversized = await f.raw('tools/call', { name: 'write_reply', arguments: write(source, 'x'.repeat(25000)) });
+  assert.equal(oversized.status, 413);
+  const logged = JSON.stringify(f.logs);
+  for (const value of ['PRIVATE_CONTENT_SENTINEL', 'PRIVATE_DRAFT_SENTINEL', 'PRIVATE_QUERY', 'PRIVATE_REFERRER', 'PRIVATE_UA',
+    'PRIVATE_EXTRA_FIELD', 'PRIVATE_EXTRA_VALUE', source.id, assertion]) assert.ok(!logged.includes(value), value);
+  assert.equal((await f.raw('tools/list')).headers.get('cache-control'), 'no-store');
+});

@@ -41,6 +41,7 @@ function configuration(env) {
     throw new NotificationError('invalid_notification_options');
   }
   return { token, chatId, from: new Date(from).toISOString(), preview, maxAttempts, delays,
+    ownerEnabled: env.OWNER_MCP_ENABLED === 'true',
     goalsEnabled: env.TELEGRAM_GOAL_NOTIFICATIONS_ENABLED === 'true' };
 }
 
@@ -152,7 +153,7 @@ export async function processOwnerNotifications(env, {
       if (now() + REQUEST_TIMEOUT_MS >= started + RUN_BUDGET_MS) break; // Lease permits a later retry.
       const result = row.source_type !== 'admin_test' && !source
         ? { ok: false, retryable: false, local: true, code: 'source_unavailable' }
-        : await sendTelegram(config, notificationText(row, source, config.preview), fetcher);
+        : await sendTelegram(config, notificationText(row, source, config.preview, config.ownerEnabled), fetcher);
       const settled = settlement(row, now(), result, config);
       // Retain a known Telegram pause for the cleanup attempt if the batch rolls back.
       nextSendAt = settled.nextSendAt;
@@ -181,4 +182,21 @@ export async function processOwnerNotifications(env, {
     log({ ...report, duration_ms: now() - started });
   }
   return report;
+}
+
+// Owner workspace reads delivery information through the notification module.
+export async function readNotificationOverview(db, sourceIds) {
+  const stats = await db.prepare(`SELECT
+    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+    SUM(CASE WHEN status IN ('pending', 'sending', 'retry') THEN 1 ELSE 0 END) AS waiting,
+    MIN(CASE WHEN status IN ('pending', 'sending', 'retry') THEN created_at END) AS oldest_waiting_at
+    FROM owner_notification_outbox`).first();
+  const channel = await db.prepare('SELECT last_run_at, last_outcome, last_error_code, next_send_at FROM owner_notification_state WHERE destination = ?').bind('owner').first();
+  const rows = sourceIds.length ? (await db.prepare('SELECT source_type, source_id, status, attempts, last_error_code, sent_at FROM owner_notification_outbox WHERE destination = ? AND source_id IN (' + sourceIds.map(() => '?').join(',') + ')')
+    .bind('owner', ...sourceIds).all()).results : [];
+  const oldest = stats.oldest_waiting_at ? Date.parse(stats.oldest_waiting_at) : null;
+  return { available: true, failed: stats.failed ?? 0, waiting: stats.waiting ?? 0,
+    oldest_waiting_at: stats.oldest_waiting_at,
+    oldest_waiting_seconds: oldest === null ? 0 : Math.max(0, Math.floor((Date.now() - oldest) / 1000)),
+    channel, deliveries: rows };
 }

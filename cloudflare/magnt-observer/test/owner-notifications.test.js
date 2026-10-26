@@ -26,8 +26,8 @@ async function migrate(db) {
 async function fixture(t, { built = false, bindings = {}, migrations = true } = {}) {
   const modules = { 'index.js': { type: 'esm', contents: 'export default { fetch() { return new Response("fixture"); } }' } };
   if (built) {
-    for (const name of (await readdir('dist')).filter((n) => n.endsWith('.js') || n.endsWith('.sql'))) {
-      modules[name] = { type: name.endsWith('.sql') ? 'text' : 'esm', contents: await readFile(`dist/${name}`, 'utf8') };
+    for (const name of (await readdir(process.env.MAGNT_TEST_BUNDLE ?? 'dist')).filter((n) => n.endsWith('.js') || n.endsWith('.sql'))) {
+      modules[name] = { type: name.endsWith('.sql') ? 'text' : 'esm', contents: await readFile(`${process.env.MAGNT_TEST_BUNDLE ?? "dist"}/${name}`, 'utf8') };
     }
   }
   const logs = [], requests = [];

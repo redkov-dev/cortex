@@ -15,6 +15,7 @@ MAGNT's richer MCP capabilities.
 | A2A discovery | Agent Card at `/.well-known/agent-card.json`; compatibility copy at `/.well-known/agent.json`; minimal JSON-RPC bridge at `POST /a2a` |
 | Profile | MCP resource `magnt://profile` and tool `about_magnt` |
 | First contact | Tool `propose_contact` saves to private Cloudflare D1 |
+| Private Owner MCP | `POST https://magnt.ru/mcp-owner`; Cloudflare Access Managed OAuth, pinned owner, optional private drafts |
 | Owner notifications | Optional minute Cron delivers saved contacts and newly queued search goals through one private Telegram outbox |
 | Shared task signals | `search_shared_experience` searches contributed experience and privately observes its minimal task; `contribute_task_signal` explicitly publishes shared content |
 | MCP discovery | `/mcp/server-card`, alias `/.well-known/mcp/server-card.json` |
@@ -213,7 +214,7 @@ The default notification includes up to 300 characters of the private contact
 summary in Alexander's personal Telegram. `TELEGRAM_PREVIEW_MODE=metadata_only`
 omits the excerpt. Neither mode includes reply addresses or credentials from
 service settings. Telegram does not accept visitor replies in this release.
-There is no public administration route or new MCP tool.
+There is no public administration tool. Private Owner tools are configured separately.
 
 Automatic traces are explicitly disabled while structured Observer logs remain
 enabled: Telegram's required request path contains the bot token, so raw outgoing
@@ -461,3 +462,19 @@ information and append-only contact capabilities.
 - [MCP versioning](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning)
 - [Experimental Server Card schema](https://github.com/modelcontextprotocol/ext-server-card/blob/main/schema.ts)
 - [Cloudflare D1](https://developers.cloudflare.com/d1/get-started/)
+
+## MAGNT Owner (release B)
+
+An independent private MCP reads contacts and observed goals, stores private
+drafts and manages acknowledgement/archive state. It never publishes or sends a
+reply. Source content stays in its original module; owner state and drafts use
+additive migration 0006. Four owner tools are absent from public discovery.
+
+Both `OWNER_MCP_ENABLED` and `OWNER_MCP_WRITE_ENABLED` default off. Access Managed
+OAuth and a pinned issuer/AUD/subject are required. Installation alone does not
+activate the server: [Russian activation guide](../../docs/owner-mcp-rollout.md).
+See [module boundaries and authorization decision](../../docs/owner-mcp-design.md).
+
+`npm test` uses an offline esbuild bundle and local Miniflare/mock services; it
+does not invoke Wrangler or call Cloudflare APIs. `npm run build` remains the
+existing Wrangler dry-run production bundler.
