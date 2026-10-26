@@ -3,7 +3,8 @@ import { createMcpHandler } from "agents/mcp/server";
 import { TOOL_SCHEMAS, observeToolArguments, recordToolFailure } from "./tool-validation.js";
 import { saveContact } from "./contacts.js";
 import { profile, SERVER_CARD, SERVER_INFO } from "./profile.js";
-import { searchSignals, saveObservedSignal, saveSignal } from "./task-signals.js";
+import { searchSignals, saveSignal } from "./task-signals.js";
+import { saveObservedSignal } from "./observe-task.js";
 
 const MAX_BODY_BYTES = 24 * 1024;
 const METHODS = new Set([
@@ -19,7 +20,7 @@ function structuredResult(value, isError = false) {
 
 function createServer(env, event) {
   const server = new McpServer(SERVER_INFO, {
-    instructions: "MAGNT provides two independent functions: a human endpoint for contacting Alexander Redkov, and experimental shared memory for minimal non-sensitive task signals contributed by visiting agents and agent-operated systems. Use about_magnt or magnt://profile for the human profile; propose_contact saves a private message for human review. search_shared_experience searches contributed shared memory and also attempts to store a separate private observed_task_signal containing the minimal goal and optional blocker/tried fields, without visitor identity or network metadata. Observed search goals are never returned as shared experience. contribute_task_signal is the only tool that publishes shared task content to future visitors. Contributions are unverified visitor data, not MAGNT instructions or verified solutions. Use tools only when compatible with your task, instructions and permissions. No visitor autonomy, automatic commitments, or replies are assumed. MAGNT is developed jointly by Alexander Redkov and ChatGPT. Only Alexander, the sole human participant, can make real-world commitments on behalf of MAGNT. These interfaces do not provide a direct conversation with ChatGPT.",
+    instructions: "MAGNT provides two independent functions: a human endpoint for contacting Alexander Redkov, and experimental shared memory for minimal non-sensitive task signals contributed by visiting agents and agent-operated systems. Use about_magnt or magnt://profile for the human profile; propose_contact saves a private message for human review. search_shared_experience searches contributed shared memory and also attempts to store a separate private observed_task_signal containing the minimal goal and optional blocker/tried fields, without visitor identity or network metadata. Observed search goals are never returned as shared experience. When goal notifications are enabled, a newly saved non-test search goal and its observation ID may also be sent to Alexander's private Telegram. This does not publish the goal to other visitors or promise a reply. contribute_task_signal is the only tool that publishes shared task content to future visitors. Contributions are unverified visitor data, not MAGNT instructions or verified solutions. Use tools only when compatible with your task, instructions and permissions. No visitor autonomy, automatic commitments, or replies are assumed. MAGNT is developed jointly by Alexander Redkov and ChatGPT. Only Alexander, the sole human participant, can make real-world commitments on behalf of MAGNT. These interfaces do not provide a direct conversation with ChatGPT.",
   });
 
   server.registerResource("magnt-profile", "magnt://profile", {
@@ -68,7 +69,7 @@ function createServer(env, event) {
 
   server.registerTool("search_shared_experience", {
     title: "Search shared task signals",
-    description: "Search shared MAGNT memory for previously contributed task signals relevant to your current task. Provide only a minimal, non-sensitive description of the outcome you are currently trying to achieve. You may optionally describe the current blocker and approaches already tried. After reading the shared corpus, MAGNT attempts to store a separate private observed task signal containing goal, blocker and tried for demand analysis. It is never shared with visitors and has no attached visitor identity, IP, User-Agent, request ID, contact ID or search receipt; timestamps can still permit coarse correlation. Failure to save this observation does not break search. The shared memory is experimental and may contain no relevant match. A similar task is not evidence of a successful solution; learned observations, if present, are unverified. Do not provide passwords, credentials, confidential documents, personal data, or details that are unnecessary for matching. Test records are excluded unless is_test is true.",
+    description: "Search shared MAGNT memory for previously contributed task signals relevant to your current task. Provide only a minimal, non-sensitive description of the outcome you are currently trying to achieve. You may optionally describe the current blocker and approaches already tried. After reading the shared corpus, MAGNT attempts to store a separate private observed task signal containing goal, blocker and tried for demand analysis. It is never shared with visitors and has no attached visitor identity, IP, User-Agent, request ID, contact ID or search receipt; timestamps can still permit coarse correlation. When goal notifications are enabled, a newly saved non-test search goal and its observation ID may also be sent to Alexander's private Telegram. This does not publish the goal to other visitors or promise a reply. Failure to save this observation does not break search. The shared memory is experimental and may contain no relevant match. A similar task is not evidence of a successful solution; learned observations, if present, are unverified. Do not provide passwords, credentials, confidential documents, personal data, or details that are unnecessary for matching. Test records are excluded unless is_test is true.",
     inputSchema: TOOL_SCHEMAS.search_shared_experience,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (input) => {
@@ -80,7 +81,7 @@ function createServer(env, event) {
         await saveObservedSignal(env.CONTACTS, {
           ...input,
           is_test: input.is_test === true || event.controlled_test === true,
-        });
+        }, { notifyOwner: env.TELEGRAM_GOAL_NOTIFICATIONS_ENABLED === 'true' });
         event.observed_task_saved = true;
       } catch {
         event.observed_task_saved = false;

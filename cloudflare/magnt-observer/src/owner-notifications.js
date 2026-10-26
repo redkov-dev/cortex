@@ -1,3 +1,7 @@
+import { readObservedGoal } from './observations.js';
+import { notificationText, sendTelegram } from './telegram-notifications.js';
+export { notificationText } from './telegram-notifications.js';
+
 const DESTINATION = 'owner';
 const DISCOVERY_LIMIT = 100;
 const SEND_LIMIT = 5;
@@ -36,60 +40,8 @@ function configuration(env) {
       || delays.some((s, i) => !Number.isInteger(s) || s < 1 || s > 86400 || (i > 0 && s < delays[i - 1]))) {
     throw new NotificationError('invalid_notification_options');
   }
-  return { token, chatId, from: new Date(from).toISOString(), preview, maxAttempts, delays };
-}
-
-function shortText(value, limit) {
-  return Array.from(String(value).replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/gu, ' ').trim())
-    .slice(0, limit).join('');
-}
-
-export function notificationText(row, contact, preview = 'summary') {
-  if (row.source_type === 'admin_test') {
-    return `MAGNT · ТЕСТ уведомлений\nПроверка личного Telegram-канала. Это не внешнее обращение.\nСобытие: ${row.notification_id}`;
-  }
-  const time = new Intl.DateTimeFormat('ru-RU', {
-    timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'short',
-  }).format(new Date(contact.created_at));
-  const lines = ['MAGNT · новое обращение', `${time} МСК`, `Контакт: ${contact.contact_id}`];
-  if (preview === 'summary') lines.push(`Сообщение: «${shortText(contact.summary, 300)}»`);
-  lines.push('Обращение сохранено. Полный текст — в D1, таблица contacts, по ID контакта.',
-    'Ответ из ChatGPT пока не подключён.', `Событие: ${row.notification_id}`);
-  return lines.join('\n');
-}
-
-async function sendTelegram(config, text, fetcher) {
-  try {
-    const response = await fetcher(`https://api.telegram.org/bot${config.token}/sendMessage`, {
-      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: config.chatId, text, link_preview_options: { is_disabled: true } }),
-    });
-    if (response.status >= 300 && response.status < 400) {
-      return { ok: false, retryable: false, code: 'telegram_redirect_refused' };
-    }
-    let body;
-    try { body = await response.json(); } catch { /* Never retain Telegram's raw response. */ }
-    if (response.ok && body?.ok === true && Number.isSafeInteger(body.result?.message_id)
-        && body.result.message_id > 0 && String(body.result.chat?.id) === config.chatId
-        && body.result.chat?.type === 'private') {
-      return { ok: true, messageId: body.result.message_id };
-    }
-    const code = Number.isInteger(body?.error_code) ? body.error_code : response.status;
-    if (code === 429) {
-      const seconds = body?.parameters?.retry_after;
-      return { ok: false, retryable: true, code: 'telegram_rate_limited',
-        retryAfter: Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 2147483647 ? seconds * 1000 : 60_000 };
-    }
-    if (code >= 400 && code < 500 && ![408, 425].includes(code)) {
-      return { ok: false, retryable: false, code: `telegram_http_${code}` };
-    }
-    return { ok: false, retryable: true,
-      code: code >= 500 ? 'telegram_server_error' : 'telegram_unconfirmed_response' };
-  } catch (error) {
-    return { ok: false, retryable: true,
-      code: ['AbortError', 'TimeoutError'].includes(error?.name) ? 'telegram_timeout' : 'telegram_network_error' };
-  }
+  return { token, chatId, from: new Date(from).toISOString(), preview, maxAttempts, delays,
+    goalsEnabled: env.TELEGRAM_GOAL_NOTIFICATIONS_ENABLED === 'true' };
 }
 
 async function discover(db, from, time) {
@@ -105,18 +57,19 @@ async function discover(db, from, time) {
   `).bind(time, from, DISCOVERY_LIMIT).run();
 }
 
-async function claim(db, token, time, maxAttempts) {
+async function claim(db, token, time, maxAttempts, goalsEnabled) {
   return db.prepare(`
     UPDATE owner_notification_outbox
     SET status = 'sending', attempts = attempts + 1, lease_token = ?, lease_until = ?
     WHERE notification_id = (
       SELECT notification_id FROM owner_notification_outbox
       WHERE destination = 'owner' AND attempts < ?
+        AND (source_type != 'observed_goal' OR ?)
         AND ((status IN ('pending', 'retry') AND next_attempt_at <= ?)
           OR (status = 'sending' AND lease_until <= ?))
-      ORDER BY created_at, notification_id LIMIT 1
+      ORDER BY CASE WHEN source_type = 'observed_goal' THEN 1 ELSE 0 END, created_at, notification_id LIMIT 1
     ) RETURNING *
-  `).bind(token, time + LEASE_MS, maxAttempts, time, time).first();
+  `).bind(token, time + LEASE_MS, maxAttempts, goalsEnabled ? 1 : 0, time, time).first();
 }
 
 function settlement(row, time, result, config) {
@@ -182,22 +135,24 @@ export async function processOwnerNotifications(env, {
     // An interrupted last attempt may have reached Telegram; do not claim it was delivered.
     report.failed += (await db.prepare(`UPDATE owner_notification_outbox
       SET status = 'failed', last_error_code = 'delivery_unconfirmed', lease_token = NULL, lease_until = 0
-      WHERE attempts >= ? AND (status IN ('pending', 'retry') OR (status = 'sending' AND lease_until <= ?))`)
-      .bind(config.maxAttempts, now()).run()).meta.changes;
+      WHERE attempts >= ? AND (source_type != 'observed_goal' OR ?)
+        AND (status IN ('pending', 'retry') OR (status = 'sending' AND lease_until <= ?))`)
+      .bind(config.maxAttempts, config.goalsEnabled ? 1 : 0, now()).run()).meta.changes;
     nextSendAt = state.next_send_at;
     for (let index = 0; index < SEND_LIMIT; index++) {
       const wait = Math.max(0, nextSendAt - now());
       if (now() + wait + REQUEST_TIMEOUT_MS >= started + RUN_BUDGET_MS) break;
       if (wait) await sleep(wait);
-      const row = await claim(db, token, now(), config.maxAttempts);
+      const row = await claim(db, token, now(), config.maxAttempts, config.goalsEnabled);
       if (!row) break;
-      const contact = row.source_type === 'contact'
+      const source = row.source_type === 'contact'
         ? await db.prepare('SELECT contact_id, created_at, summary FROM contacts WHERE contact_id = ? AND self_reported_test = 0')
-          .bind(row.source_id).first() : null;
+          .bind(row.source_id).first()
+        : row.source_type === 'observed_goal' ? await readObservedGoal(db, row.source_id) : null;
       if (now() + REQUEST_TIMEOUT_MS >= started + RUN_BUDGET_MS) break; // Lease permits a later retry.
-      const result = row.source_type === 'contact' && !contact
+      const result = row.source_type !== 'admin_test' && !source
         ? { ok: false, retryable: false, local: true, code: 'source_unavailable' }
-        : await sendTelegram(config, notificationText(row, contact, config.preview), fetcher);
+        : await sendTelegram(config, notificationText(row, source, config.preview), fetcher);
       const settled = settlement(row, now(), result, config);
       // Retain a known Telegram pause for the cleanup attempt if the batch rolls back.
       nextSendAt = settled.nextSendAt;

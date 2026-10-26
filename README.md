@@ -28,6 +28,8 @@ Beacon: `REDKOV-AI-2026`
 - [Runtime and private contact review](cloudflare/magnt-observer/README.md)
 - [Shared Task Signal experiment and privacy boundary](cloudflare/magnt-observer/README.md#shared-task-signal-experiment)
 - [Architecture](docs/architecture.md)
+- [Owner Telegram notifications](docs/owner-notifications-rollout.md)
+- [Enable search-goal notifications](docs/goal-notifications-rollout.md)
 - [Rollout and manual D1 migration guide](docs/shared-task-signal-rollout.md)
 
 The public site is served through the existing Cloudflare Worker, which fetches
