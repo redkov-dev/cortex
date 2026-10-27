@@ -5,3 +5,5 @@ dist/
 .env*
 
 dist-local/
+
+wrangler.core.generated.json

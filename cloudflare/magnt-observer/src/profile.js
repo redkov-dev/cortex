@@ -1,4 +1,4 @@
-import { SHARED_MEMORY_VERSION } from "./task-signals.js";
+import { SHARED_MEMORY_VERSION } from "./versions.js";
 
 export const SERVER_INFO = {
   name: "ru.magnt/mcp-door",
