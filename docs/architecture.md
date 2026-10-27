@@ -1,6 +1,6 @@
 # MAGNT architecture — Shared Task Signal MVP
 
-Implementation: MCP Door 0.2.0; shared-memory experiment 0.2.0; private Owner MCP 0.1.0 (default off).
+Implementation: MCP Door 0.2.0; shared-memory experiment 0.2.0; private Owner MCP 0.2.0 (B.1, default off).
 This document describes the implementation in this revision; production readiness
 is established by migration, deployment and a controlled production smoke test.
 
@@ -17,7 +17,7 @@ existing documentation and journal. See [Participants and how we work](../about.
 | Static website, `agents.md`, `llms.txt`, `connect.html` | `magnt-observer` Worker | GitHub Raw, `redkov-dev/cortex/main` |
 | `POST /mcp`: `about_magnt`, `magnt://profile` | Official MCP SDK and `createMcpHandler` | Public profile in Worker code |
 | `POST /a2a` | Minimal JSON-RPC `SendMessage` discovery bridge | Connection guidance; no conversation with ChatGPT |
-| `POST /mcp-owner` | Separate authenticated Owner MCP adapter and source/workspace workflow | Original contacts/goals; private owner state, drafts and operation receipts |
+| `POST owner.magnt.ru/mcp` | Owner gateway → private `OwnerApi`, local OAuth + pinned GitHub identity | Original contacts/goals; private owner state, drafts and operation receipts |
 | Owner notifications | Minute Cron, leased durable queue and Telegram adapter | Private `owner_notification_outbox` and `owner_notification_state` |
 | `propose_contact` | Existing private contact workflow | `CONTACTS` → D1 `magnt-contacts.contacts` |
 | `search_shared_experience` | Deterministic token matching and a separate best-effort observation write | Latest 100 active contributed `task_signals` in one test cohort; at most 3 results; private task fields in `observed_task_signals` |
@@ -94,13 +94,26 @@ delivery states or pinned recipient settings. Both feature flags default off.
 The new code supports the old database while the goal flag is off. Activation
 and recovery instructions: [goal notifications](goal-notifications-rollout.md).
 
-## Private Owner MCP, release B
+## Private Owner MCP, release B.1
 
-The owner can read incoming contacts and goals, save private drafts and manage
-the queue through a separate endpoint. Access Managed OAuth performs login;
-the Worker verifies the signed application assertion and pins the owner subject.
-A separate server flag controls writes. Both flags default off. Full activation
-requires migration 0006 and a real ChatGPT OAuth/read/draft acceptance check.
+The owner can read contacts/goals, save private drafts and manage incoming items.
+B.1 replaces Access with local OAuth through the pinned official Cloudflare
+library: initial GitHub login, silent refresh, fixed numeric owner, resource,
+scopes and revocation epoch. Both owner feature flags default off. No Zero Trust
+subscription or MAGNT password is required.
+
+After manual cutover, `magnt-core` owns D1, OAuth KV, secrets and notifications;
+it has no public HTTP route. The existing public gateway selects `PublicApi`
+through a Service Binding; a new owner gateway selects `OwnerApi` and applies
+request/rate limits. Authorization is verified again inside the core. The
+public gateway has no database or secrets. Business logic remains modular in
+one core. The isolation requirement justifies the deployment-unit split under
+AR-01; see [the decision](owner-security-decision.md).
+
+Migration 0006 is already applied. B.1 adds no SQL. Default `wrangler.jsonc` keeps
+the working public/Telegram path during setup; `wrangler.public.jsonc` completes
+the gateway cutover. Production isolation and ChatGPT/Free-tier acceptance require
+the manual checks below. Public and private endpoints do not share a session.
 
 [Owner module boundaries and decisions](owner-mcp-design.md) describe SQL ownership,
 atomic writes, bounded pagination and private logging. [Activation instructions](owner-mcp-rollout.md)

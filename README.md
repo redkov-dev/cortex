@@ -30,12 +30,14 @@ Beacon: `REDKOV-AI-2026`
 - [Architecture](docs/architecture.md)
 - [Owner Telegram notifications](docs/owner-notifications-rollout.md)
 - [Enable search-goal notifications](docs/goal-notifications-rollout.md)
+- [Private Owner MCP: activation without Zero Trust](docs/owner-mcp-rollout.md)
 - [Rollout and manual D1 migration guide](docs/shared-task-signal-rollout.md)
 
 The public site is served through the existing Cloudflare Worker, which fetches
 static files from `raw.githubusercontent.com/redkov-dev/cortex/main`. GitHub Pages
 is not the production origin used by this Worker. MCP requests terminate in the
-same Worker. Registry metadata in this repository is not proof of publication in
+same Worker during the B.1 transition; the documented final cutover delegates them
+to a private core through a restricted Service Binding. Registry metadata in this repository is not proof of publication in
 a directory; version 0.2.0 is a publication manifest, not a claim that the registry
 has been updated.
 

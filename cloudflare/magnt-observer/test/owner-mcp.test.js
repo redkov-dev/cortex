@@ -1,72 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
-import { Miniflare } from 'miniflare';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Client as LegacyClient } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport as LegacyTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { notificationText } from '../src/telegram-notifications.js';
 
-const keys = await generateKeyPair('RS256');
-const jwk = { ...await exportJWK(keys.publicKey), kid: 'test-owner-key', alg: 'RS256', use: 'sig' };
-const settings = { OWNER_MCP_ENABLED: 'true', OWNER_MCP_WRITE_ENABLED: 'true',
-  OWNER_ACCESS_ISSUER: 'https://magnt-test.cloudflareaccess.com', OWNER_ACCESS_AUD: 'a'.repeat(64), OWNER_ACCESS_SUB: 'owner-test-subject' };
-async function jwt(claims = {}, header = {}) {
-  return new SignJWT({ type: 'app', iss: settings.OWNER_ACCESS_ISSUER, aud: [settings.OWNER_ACCESS_AUD],
-    sub: settings.OWNER_ACCESS_SUB, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 900, ...claims })
-    .setProtectedHeader({ alg: 'RS256', kid: jwk.kid, ...header }).sign(keys.privateKey);
-}
-const assertion = await jwt();
-const meta = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-  'io.modelcontextprotocol/clientInfo': { name: 'owner-integration-test', version: '0.1.0' },
-  'io.modelcontextprotocol/clientCapabilities': {} };
-async function fixture(t, { overrides = {}, through = 6 } = {}) {
-  const modules = {};
-  for (const file of (await readdir(process.env.MAGNT_TEST_BUNDLE ?? 'dist')).filter(n => n.endsWith('.js') || n.endsWith('.sql'))) {
-    modules[file] = { type: file.endsWith('.sql') ? 'text' : 'esm', contents: await readFile((process.env.MAGNT_TEST_BUNDLE ?? 'dist') + '/' + file, 'utf8') };
-  }
-  // Miniflare's network bridge rewrites Host to loopback; restore the edge's
-  // URL/Host pairing before invoking the unchanged production Worker.
-  modules['test-entry.js'] = { type: 'esm', contents: `import worker from './index.js';
-    export default { ...worker, fetch(request, env, ctx) {
-      const headers = new Headers(request.headers); headers.set('host', new URL(request.url).host);
-      return worker.fetch(new Request(request, { headers }), env, ctx);
-    } };` };
-  const logs = [], requests = [];
-  const bindings = { ...settings, ...overrides };
-  const mf = new Miniflare({ cf: false, logRequests: false, telemetry: { enabled: false },
-    handleStructuredLogs: entry => logs.push(entry), workers: [{ config: { name: 'owner-mcp-test',
-      compatibilityDate: '2026-09-23', compatibilityFlags: ['nodejs_compat'], manifest: { mainModule: 'test-entry.js', modules },
-      env: { CONTACTS: { type: 'd1', id: crypto.randomUUID() },
-        ...Object.fromEntries(Object.entries(bindings).filter(([,v]) => v !== undefined).map(([k, value]) => [k, { type: 'text', value }])) },
-    }, dev: { outboundService: { type: 'fetcher', handler: async request => {
-      requests.push(request.url);
-      assert.equal(request.url, settings.OWNER_ACCESS_ISSUER + '/cdn-cgi/access/certs');
-      return Response.json({ keys: [jwk] });
-    } } } }] });
-  t.after(() => mf.dispose());
-  const db = await mf.getD1Database('CONTACTS');
-  for (const name of (await readdir('migrations')).filter(n => n.endsWith('.sql') && Number(n.slice(0,4)) <= through).sort()) {
-    const sql = (await readFile('migrations/' + name, 'utf8')).replace(/--[^\n]*/g, '');
-    await db.batch(sql.split(';').filter(s => s.trim()).map(s => db.prepare(s)));
-  }
-  const worker = await mf.getWorker();
-  const fetchWorker = (url, init) => worker.fetch(String(url), init);
-  const raw = (method, params = {}, { token = assertion, path = '/mcp-owner', headers = {} } = {}) => fetchWorker('https://magnt.ru' + path, {
-    method: 'POST', headers: { host: 'magnt.ru', 'content-type': 'application/json', accept: 'application/json, text/event-stream',
-      'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': method, ...(method === 'tools/call' ? { 'Mcp-Name': params.name } : {}), ...(token ? { 'Cf-Access-Jwt-Assertion': token } : {}), ...headers },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { ...params, _meta: meta } }),
-  });
-  const call = async (name, args = {}, options) => {
-    const response = await raw('tools/call', { name, arguments: args }, options);
-    const text = await response.text();
-    assert.equal(response.status, 200, text);
-    const body = JSON.parse(text);
-    assert.ok(body.result, text);
-    return { ...body.result, value: body.result.structuredContent, size: new TextEncoder().encode(text).byteLength };
-  };
-  return { mf, db, raw, call, logs, requests, fetchWorker };
-}
+import { fixture, OWNER } from './support/owner-fixture.mjs';
+
 async function seed(f, { type = 'contact', text = 'Private input', isTest = false, time = '2026-10-20T10:00:00.000Z' } = {}) {
   const id = (type === 'contact' ? 'mc_' : 'ots_') + crypto.randomUUID();
   if (type === 'contact') await f.db.prepare('INSERT INTO contacts (contact_id, created_at, summary, reply_to, previous_contact_id, submission_id, payload_hash, self_reported_test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
@@ -81,37 +20,29 @@ const update = (source, action, revision, extra = {}) => ({ conversation_id: sou
   action, expected_revision: revision, submission_id: crypto.randomUUID(), ...extra });
 const count = async (f, table) => (await f.db.prepare('SELECT COUNT(*) AS n FROM ' + table).first()).n;
 
-test('owner auth validates signatures, application audience, expiry and pinned subject; public tools remain separate', { timeout: 60000 }, async t => {
+test('owner auth rejects missing, foreign, revoked and forged credentials; public tools remain separate', { timeout: 60000 }, async t => {
   const f = await fixture(t);
   assert.equal((await f.raw('tools/list', {}, { token: null })).status, 401);
   assert.equal((await f.raw('tools/list', {}, { headers: { origin: 'https://attacker.example' } })).status, 403);
-  for (const claims of [{ iss: 'https://attacker.example' }, { aud: ['another-app'] },
-    { exp: Math.floor(Date.now()/1000)-10 }, { iat: Math.floor(Date.now()/1000)+600 }, { type: 'service' }, { sub: undefined }]) {
-    assert.equal((await f.raw('tools/list', {}, { token: await jwt(claims) })).status, 401);
-  }
-  assert.equal((await f.raw('tools/list', {}, { token: await jwt({ sub: 'other-user', email: 'owner@example.test' }) })).status, 403);
-  const tampered = assertion.slice(0, -10) + '1234567890';
-  assert.equal((await f.raw('tools/list', {}, { token: tampered })).status, 401);
+  assert.equal((await f.raw('tools/list', {}, { token: (await f.mint({ userId: '2' })).access_token })).status, 403);
+  assert.equal((await f.raw('tools/list', {}, { token: (await f.mint({ epoch: 'old' })).access_token })).status, 403);
+  assert.equal((await f.raw('tools/list', {}, { token: f.credentials.access_token + 'broken' })).status, 401);
   const tools = (await (await f.raw('tools/list')).json()).result.tools;
   assert.deepEqual(tools.map(x => x.name).sort(), ['list_inbox', 'read_conversation', 'update_inbox', 'write_reply']);
   assert.equal(tools.find(x => x.name === 'list_inbox').annotations.readOnlyHint, true);
   assert.equal(tools.find(x => x.name === 'write_reply').annotations.readOnlyHint, false);
-  assert.deepEqual(tools[0]._meta.securitySchemes, [{ type: 'oauth2' }]);
-  const publicTools = (await (await f.raw('tools/list', {}, { token: null, path: '/mcp' })).json()).result.tools;
+  assert.equal(tools[0]._meta.securitySchemes[0].type, 'oauth2');
+  const publicTools = (await (await f.raw('tools/list', {}, { token: null, public: true })).json()).result.tools;
   assert.deepEqual(publicTools.map(x => x.name).sort(), ['about_magnt', 'contribute_task_signal', 'propose_contact', 'search_shared_experience']);
-  assert.ok(f.requests.every(url => url === settings.OWNER_ACCESS_ISSUER + '/cdn-cgi/access/certs'));
+  assert.equal(f.requests.length, 0);
 });
 
-test('disabled, incomplete and read-only configurations fail closed; bootstrap reveals only caller identity', { timeout: 60000 }, async t => {
-  for (const overrides of [{ OWNER_MCP_ENABLED: 'false' }, { OWNER_ACCESS_SUB: undefined }, { OWNER_ACCESS_ISSUER: 'https://evil.example' }]) {
+test('disabled, incomplete and read-only configurations fail closed', { timeout: 60000 }, async t => {
+  for (const overrides of [{ OWNER_MCP_ENABLED: 'false' }, { OWNER_GITHUB_ID: undefined }, { OWNER_AUTH_EPOCH: undefined }]) {
     const f = await fixture(t, { overrides });
     assert.equal((await f.raw('tools/list')).status, 503);
-    assert.equal((await (await f.raw('tools/list', {}, { path: '/mcp' })).json()).result.tools.length, 4);
+    assert.equal((await (await f.raw('tools/list', {}, { public: true })).json()).result.tools.length, 4);
   }
-  const f = await fixture(t, { overrides: { OWNER_ACCESS_SUB: undefined, OWNER_MCP_ENABLED: 'false' } });
-  const identity = await f.mf.dispatchFetch('https://magnt.ru/mcp-owner/identity', { headers: { 'Cf-Access-Jwt-Assertion': assertion } });
-  assert.equal(identity.status, 200); assert.equal((await identity.json()).subject, settings.OWNER_ACCESS_SUB);
-  assert.equal((await f.mf.dispatchFetch('https://magnt.ru/mcp-owner/identity')).status, 401);
   const readOnly = await fixture(t, { overrides: { OWNER_MCP_WRITE_ENABLED: 'false' } });
   const source = await seed(readOnly);
   assert.equal((await readOnly.call('read_conversation', { reference: source.id })).value.can_draft, false);
@@ -155,7 +86,7 @@ test('drafts survive new clients; exact retries are idempotent and conflicting c
   assert.equal((await f.call('write_reply', write(source))).value.code, 'revision_conflict');
   const legacy = new LegacyClient({ name: 'owner-second-client', version: '0.1.0' });
   try {
-    await legacy.connect(new LegacyTransport(new URL('https://magnt.ru/mcp-owner'), { requestInit: { headers: { host: 'magnt.ru', 'Cf-Access-Jwt-Assertion': assertion } }, fetch: f.fetchWorker }));
+    await legacy.connect(new LegacyTransport(new URL(OWNER + '/mcp'), { requestInit: { headers: { authorization: 'Bearer ' + f.credentials.access_token } }, fetch: f.fetchWorker }));
     const read = (await legacy.callTool({ name: 'read_conversation', arguments: { reference: source.id } })).structuredContent;
     assert.equal(read.events[1].body, input.body); assert.equal(read.revision, 2);
   } finally { await legacy.close(); }
@@ -165,7 +96,7 @@ test('drafts survive new clients; exact retries are idempotent and conflicting c
   assert.equal(edits.filter(x => x.value.code === 'revision_conflict').length, 1);
   assert.equal(await count(f, 'owner_replies'), 1);
   assert.equal((await f.call('write_reply', input)).value.reply_id, duplicates[0].value.reply_id);
-  assert.equal((await f.raw('tools/call', { name: 'write_reply', arguments: input }, { token: await jwt({ sub: 'other-user' }) })).status, 403);
+  assert.equal((await f.raw('tools/call', { name: 'write_reply', arguments: input }, { token: (await f.mint({ userId: '2' })).access_token })).status, 403);
   const other = await seed(f);
   assert.equal((await f.call('write_reply', { ...write(other), reply_id: duplicates[0].value.reply_id })).value.code, 'reply_not_found');
 });
@@ -200,7 +131,7 @@ test('D1 failure rolls back revision, draft and receipt together and never break
   assert.equal((await f.call('write_reply', input)).value.status, 'draft_saved');
   const oldSchema = await fixture(t, { through: 5 });
   assert.equal((await oldSchema.call('list_inbox')).value.code, 'storage_unavailable');
-  const publicCall = await oldSchema.raw('tools/call', { name: 'propose_contact', arguments: { summary: 'Public intake survives missing owner migration', is_test: true } }, { path: '/mcp', token: null });
+  const publicCall = await oldSchema.raw('tools/call', { name: 'propose_contact', arguments: { summary: 'Public intake survives missing owner migration', is_test: true } }, { public: true, token: null });
   assert.equal((await publicCall.json()).result.structuredContent.status, 'accepted_for_human_review');
 });
 
@@ -274,18 +205,18 @@ test('long private draft history is paged under 64 KiB and cursor cannot cross c
 
 test('private route logs never contain source text, credentials, query, referrer, client metadata or validation values', { timeout: 60000 }, async t => {
   const f = await fixture(t); const source = await seed(f, { text: 'PRIVATE_CONTENT_SENTINEL' });
-  await f.call('read_conversation', { reference: source.id }, { path: '/mcp-owner?code=PRIVATE_QUERY',
+  await f.call('read_conversation', { reference: source.id }, { path: '/mcp?code=PRIVATE_QUERY',
     headers: { referer: 'https://example.test/PRIVATE_REFERRER', 'user-agent': 'PRIVATE_UA' } });
   await f.call('write_reply', write(source, 'PRIVATE_DRAFT_SENTINEL'));
   assert.equal((await f.call('list_inbox', { PRIVATE_EXTRA_FIELD: 'PRIVATE_EXTRA_VALUE' })).value.code, 'invalid_arguments');
-  const reserved = await f.mf.dispatchFetch('https://magnt.ru/.well-known/oauth-not-configured?token=PRIVATE_QUERY');
-  assert.equal(reserved.status, 404); assert.equal(reserved.headers.get('cache-control'), 'no-store');
-  const wrongHost = await f.mf.dispatchFetch('https://www.magnt.ru/mcp-owner', { headers: { 'Cf-Access-Jwt-Assertion': assertion } });
+  const reserved = await f.pub.fetch('https://magnt.ru/.well-known/oauth-not-configured?token=PRIVATE_QUERY');
+  assert.equal(reserved.status, 503); assert.equal(reserved.headers.get('cache-control'), 'no-store');
+  const wrongHost = await f.edge.fetch('https://www.magnt.ru/mcp', { headers: { authorization: 'Bearer ' + f.credentials.access_token } });
   assert.equal(wrongHost.status, 404);
   const oversized = await f.raw('tools/call', { name: 'write_reply', arguments: write(source, 'x'.repeat(25000)) });
   assert.equal(oversized.status, 413);
   const logged = JSON.stringify(f.logs);
   for (const value of ['PRIVATE_CONTENT_SENTINEL', 'PRIVATE_DRAFT_SENTINEL', 'PRIVATE_QUERY', 'PRIVATE_REFERRER', 'PRIVATE_UA',
-    'PRIVATE_EXTRA_FIELD', 'PRIVATE_EXTRA_VALUE', source.id, assertion]) assert.ok(!logged.includes(value), value);
+    'PRIVATE_EXTRA_FIELD', 'PRIVATE_EXTRA_VALUE', source.id, f.credentials.access_token]) assert.ok(!logged.includes(value), value);
   assert.equal((await f.raw('tools/list')).headers.get('cache-control'), 'no-store');
 });

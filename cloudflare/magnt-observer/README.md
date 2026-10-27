@@ -15,7 +15,7 @@ MAGNT's richer MCP capabilities.
 | A2A discovery | Agent Card at `/.well-known/agent-card.json`; compatibility copy at `/.well-known/agent.json`; minimal JSON-RPC bridge at `POST /a2a` |
 | Profile | MCP resource `magnt://profile` and tool `about_magnt` |
 | First contact | Tool `propose_contact` saves to private Cloudflare D1 |
-| Private Owner MCP | `POST https://magnt.ru/mcp-owner`; Cloudflare Access Managed OAuth, pinned owner, optional private drafts |
+| Private Owner MCP | `POST https://owner.magnt.ru/mcp`; isolated gateway/core, local OAuth, pinned GitHub owner, private drafts |
 | Owner notifications | Optional minute Cron delivers saved contacts and newly queued search goals through one private Telegram outbox |
 | Shared task signals | `search_shared_experience` searches contributed experience and privately observes its minimal task; `contribute_task_signal` explicitly publishes shared content |
 | MCP discovery | `/mcp/server-card`, alias `/.well-known/mcp/server-card.json` |
@@ -191,6 +191,12 @@ identity or deduplicate demand.
 
 ## Deployment on the existing infrastructure
 
+**B.1 cutover:** the commands/config below describe the transitional public
+monolith. New core/owner deployments and the final public gateway use their own
+configs and deploy commands in [the Owner activation guide](../../docs/owner-mcp-rollout.md).
+Do not run the default deploy after the final cutover: it restores the monolith
+binding and Cron. Applied migrations 0001–0006 must not be reapplied.
+
 ### Optional owner notifications
 
 The `scheduled` handler polls persisted `contacts`, not HTTP logs. It excludes
@@ -307,6 +313,10 @@ can be saved but may not have a usable return channel. `review_status` starts at
 `pending`; Alexander can update it in the private dashboard after review.
 
 ## Telemetry and interpretation
+
+After B.1 cutover, export `mcp_request`/`mcp_card` events from `magnt-core`.
+Public gateway logs describe HTTP traffic, not a second tool execution. The
+existing metrics parser retains its event/path filter and test exclusions.
 
 One structured event is emitted per HTTP request after the handler returns,
 including the original request fields, HTTP `status`, `duration_ms`, and `event_id`.
@@ -463,16 +473,17 @@ information and append-only contact capabilities.
 - [Experimental Server Card schema](https://github.com/modelcontextprotocol/ext-server-card/blob/main/schema.ts)
 - [Cloudflare D1](https://developers.cloudflare.com/d1/get-started/)
 
-## MAGNT Owner (release B)
+## MAGNT Owner (release B.1)
 
 An independent private MCP reads contacts and observed goals, stores private
 drafts and manages acknowledgement/archive state. It never publishes or sends a
 reply. Source content stays in its original module; owner state and drafts use
 additive migration 0006. Four owner tools are absent from public discovery.
 
-Both `OWNER_MCP_ENABLED` and `OWNER_MCP_WRITE_ENABLED` default off. Access Managed
-OAuth and a pinned issuer/AUD/subject are required. Installation alone does not
-activate the server: [Russian activation guide](../../docs/owner-mcp-rollout.md).
+Both `OWNER_MCP_ENABLED` and `OWNER_MCP_WRITE_ENABLED` default off. The private
+core validates local OAuth tokens, the pinned numeric GitHub owner, audience,
+scopes and revocation epoch. GitHub login is needed at linking; ongoing refresh
+is local. No Zero Trust setup is used. Installation alone does not activate the server: [Russian activation guide](../../docs/owner-mcp-rollout.md).
 See [module boundaries and authorization decision](../../docs/owner-mcp-design.md).
 
 `npm test` uses an offline esbuild bundle and local Miniflare/mock services; it

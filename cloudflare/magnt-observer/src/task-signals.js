@@ -1,4 +1,4 @@
-export const SHARED_MEMORY_VERSION = "0.2.0";
+export { SHARED_MEMORY_VERSION } from './versions.js';
 export const CANDIDATE_LIMIT = 100;
 export const MATCH_LIMIT = 3;
 export const MIN_SCORE = 0.15;

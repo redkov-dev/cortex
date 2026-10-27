@@ -16,19 +16,22 @@
     "metrics": "node scripts/shared-memory-metrics.mjs",
     "db:migrate": "wrangler d1 migrations apply CONTACTS --remote",
     "db:local": "wrangler d1 migrations apply CONTACTS --local --config wrangler.local.jsonc",
-    "build:local": "node scripts/build-local.mjs"
+    "build:local": "node scripts/build-local.mjs",
+    "deploy:core": "node scripts/prepare-core-config.mjs && wrangler deploy --config wrangler.core.generated.json",
+    "deploy:owner": "wrangler deploy --config wrangler.owner.jsonc",
+    "deploy:public": "wrangler deploy --config wrangler.public.jsonc"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4",
     "@modelcontextprotocol/server": "2.0.0",
     "agents": "0.24.0",
-    "jose": "6.2.12",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/sdk": "1.30.0",
+    "esbuild": "0.28.2",
     "miniflare": "5.20260923.0-alpha",
-    "wrangler": "4.139.0",
-    "esbuild": "0.28.2"
+    "wrangler": "4.139.0"
   }
 }
