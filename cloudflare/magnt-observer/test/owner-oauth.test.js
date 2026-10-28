@@ -36,6 +36,7 @@ async function begin(f, { cimd = false, clientName = 'ChatGPT', redirect = redir
   const html = await consent.text(); assert.equal(consent.status, 200, html);
   const handle = html.match(/name="handle" value="([^"]+)"/)?.[1]; assert.ok(handle, html);
   assert.equal(consent.headers.get('x-frame-options'), 'DENY');
+  assert.equal(consent.headers.get('referrer-policy'), 'strict-origin');
   assert.ok(consent.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
   return { clientId, verifier, handle, cookie: cookies(consent), html, url, scope: requestedScope };
 }
@@ -118,6 +119,41 @@ test('authorization rejects wrong owners, cross-browser state, unsafe clients an
   const registration = await f.edge.fetch(OWNER + '/oauth/register', { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ client_name: 'ChatGPT', redirect_uris: ['https://evil.example/cb'], token_endpoint_auth_method: 'none' }) });
   assert.equal(registration.status, 400);
+});
+
+test('consent browser headers preserve Origin without relaxing CSRF or exposing OAuth queries', { timeout: 60000 }, async t => {
+  const f = await fixture(t, { overrides: { OWNER_DCR_ENABLED: 'false' } });
+  const flow = await begin(f, { cimd: true });
+  const page = await f.edge.fetch(flow.url);
+  assert.equal(page.headers.get('referrer-policy'), 'strict-origin');
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  assert.equal(page.headers.get('content-security-policy'),
+    `default-src 'none'; form-action 'self' https://github.com/login/oauth/authorize ${redirectUri}; frame-ancestors 'none'; base-uri 'none'`);
+  const fields = { handle: flow.handle, decision: 'approve', scope: 'magnt.owner.read' };
+  for (const origin of [undefined, 'null', 'https://evil.example', 'https://magnt.ru']) {
+    const rejected = await post(f, '/authorize', fields, {
+      cookie: flow.cookie, ...(origin === undefined ? {} : { origin }),
+    });
+    assert.equal(rejected.status, 403);
+    assert.equal((await rejected.json()).code, 'invalid_origin');
+    assert.equal(rejected.headers.get('referrer-policy'), 'no-referrer');
+  }
+  assert.equal((await post(f, '/authorize', fields, { origin: OWNER })).status, 400);
+  const approved = await post(f, '/authorize', fields, { origin: OWNER, cookie: flow.cookie });
+  assert.equal(approved.status, 302, await approved.text());
+  assert.equal(new URL(approved.headers.get('location')).origin, 'https://github.com');
+  assert.equal(approved.headers.get('referrer-policy'), 'no-referrer');
+  for (const path of ['/mcp', '/.well-known/oauth-authorization-server']) {
+    const response = await f.edge.fetch(OWNER + path);
+    assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+  }
+  const cancel = await begin(f, { cimd: true });
+  const denied = await post(f, '/authorize', { handle: cancel.handle, decision: 'deny' }, { origin: OWNER, cookie: cancel.cookie });
+  assert.equal(denied.status, 302);
+  const destination = new URL(denied.headers.get('location'));
+  assert.equal(destination.origin + destination.pathname, redirectUri);
+  assert.equal(destination.searchParams.get('error'), 'access_denied');
+  assert.equal(denied.headers.get('referrer-policy'), 'no-referrer');
 });
 
 test('PKCE, audience, revocation, expiry and authorization epoch are enforced by the private core', { timeout: 60000 }, async t => {

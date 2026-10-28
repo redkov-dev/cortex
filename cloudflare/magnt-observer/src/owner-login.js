@@ -66,7 +66,9 @@ export async function handleOwnerLogin(request, env, oauth) {
       const details = await oauth.describeConsent(parsed);
       const consent = await oauth.beginConsent(parsed);
       consent.headers.set('content-type', 'text/html; charset=utf-8');
-      consent.headers.set('content-security-policy', "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+      // Chromium checks form-action on redirects too: approval goes to GitHub,
+      // cancellation to the ChatGPT callback already validated by allowedRequest.
+      consent.headers.set('content-security-policy', `default-src 'none'; form-action 'self' https://github.com/login/oauth/authorize ${parsed.redirectUri}; frame-ancestors 'none'; base-uri 'none'`);
       return new Response(consentHtml(details, consent.handle, parsed.scope), { headers: consent.headers });
     }
     if (url.pathname === '/authorize' && request.method === 'POST') {

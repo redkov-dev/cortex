@@ -41,6 +41,19 @@ CIMD is the default; dynamic registration is closed unless temporarily enabled
 for a legacy client. No public signup, client-supplied identity or caller-supplied
 privileges.
 
+### Browser consent correction, 29 October 2026
+
+Keep the exact owner-origin check on consent POSTs and the library's browser-bound
+consent handle/cookie. A form document must use `Referrer-Policy: strict-origin`:
+`no-referrer` makes browsers send `Origin: null` on navigation POSTs, so the old
+blanket response policy rejected the legitimate form. `strict-origin` preserves
+the origin while excluding the authorization path and query from referrers.
+Other responses retain `no-referrer`. Alongside `'self'`, allow only the fixed
+GitHub authorization destination and the validated ChatGPT cancellation callback
+in `form-action`, since Chromium checks form redirects too.
+Verify actual browser submission through the gateway and core,
+including the redirect to GitHub, after deployment.
+
 ## Limits and activation
 
 Use only Workers/KV/D1 free allowances and existing GitHub. Edge WAF/DDoS protection
