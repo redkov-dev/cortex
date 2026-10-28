@@ -34,7 +34,12 @@ export async function boundOwnerRequest(request) {
 }
 export function protectOwnerResponse(response) {
   const headers = new Headers(response.headers);
-  headers.set('cache-control', 'no-store'); headers.set('referrer-policy', 'no-referrer');
+  // Navigation POSTs from a no-referrer document carry Origin: null. Keep the
+  // consent form's real origin without sharing its OAuth path/query as a referrer.
+  const isFormDocument = response.status === 200
+    && headers.get('content-type')?.split(';')[0].trim().toLowerCase() === 'text/html';
+  headers.set('cache-control', 'no-store');
+  headers.set('referrer-policy', isFormDocument ? 'strict-origin' : 'no-referrer');
   headers.set('x-content-type-options', 'nosniff'); headers.set('x-frame-options', 'DENY');
   return new Response(response.body, { status: response.status, headers });
 }
