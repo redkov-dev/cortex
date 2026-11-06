@@ -159,7 +159,9 @@ async function readConversation(db, actor, input, env) {
     after = event.sequence;
   }
   if (events.length && !result.events.length) throw new OwnerError('response_too_large');
-  result.has_more = after < state.last_sequence;
+  // The workspace sequence also includes dialogue events hidden while C.1 reading is paused.
+  // Only offer another page when a further event is actually available in this mode.
+  result.has_more = events.some(event => event.sequence > after);
   result.next_cursor = encodeCursor({ kind: 'conversation', conversation_id: state.conversation_id, revision: state.revision, after });
   const notifications = await notificationOverview(db, [dialogue?.latest_incoming_id?.startsWith('dm_') ? dialogue.latest_incoming_id : source.source_id]);
   result.notification = notifications.deliveries[0] ?? null;

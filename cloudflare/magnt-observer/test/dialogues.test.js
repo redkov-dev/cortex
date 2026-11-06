@@ -413,6 +413,28 @@ test('Identical owner request committed during preflight returns its receipt wit
   assert.equal(await count(f, 'dialogue_access'), 1); assert.equal(await count(f, 'dialogue_events'), 2);
 });
 
+test('Full dialogue stop terminates Owner pagination over retained original messages and drafts', { timeout: 60000 }, async t => {
+  const f = await setup(t, { overrides: { DIALOGUE_READ_ENABLED: 'false' } });
+  const env = { CONTACTS: f.db, ...enabled }, actor = { verified: true, id: 'paused-owner', canWrite: true };
+  const receipt = await createContactDialogue(env, { summary: 'original' }, {});
+  const c = { ...receipt, conversation_id: 'oc_' + receipt.contact_id };
+  const publish = async revision => runOwnerOperation(env, actor, 'write_reply', { conversation_id: c.conversation_id,
+    expected_revision: revision, mode: 'publish', body: 'retained public reply', submission_id: crypto.randomUUID() });
+  await publish(1);
+  await write(f, c, 'retained draft', { mode: 'draft' });
+  await publish(3);
+  const first = (await f.call('read_conversation', { reference: c.contact_id, limit: 1 })).value;
+  assert.equal(first.events[0].type, 'contact'); assert.equal(first.has_more, true);
+  const last = (await f.call('read_conversation', { reference: c.contact_id, limit: 1, cursor: first.next_cursor })).value;
+  assert.equal(last.events[0].body, 'retained draft'); assert.equal(last.has_more, false);
+  const empty = (await f.call('read_conversation', { reference: c.contact_id, limit: 1, cursor: last.next_cursor })).value;
+  assert.equal(empty.events.length, 0); assert.equal(empty.has_more, false);
+  const restored = await runOwnerOperation(env, actor, 'read_conversation', { reference: c.contact_id });
+  assert.equal(restored.events.length, 4);
+  assert.equal(restored.events.filter(e => e.body === 'retained public reply').length, 2);
+  assert.equal(await count(f, 'dialogue_events'), 3);
+});
+
 test('C.1 dependency graph is acyclic and workflows use domain operations', async () => {
   const files = (await readdir('src')).filter(name => name.endsWith('.js'));
   const graph = new Map();
