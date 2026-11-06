@@ -9,6 +9,12 @@ const messages = {
   storage_unavailable: 'Хранилище не подтвердило операцию. Повторите запись с тем же submission_id и содержимым.',
   forbidden: 'Это действие не разрешено для текущего доступа.',
   response_too_large: 'Событие слишком велико для одного ответа. Оно не было обрезано.',
+  message_too_large: 'Сообщение слишком велико для безопасной выдачи. Сократите его.',
+  dialogue_unavailable: 'Доступ к диалогу недействителен или отозван.',
+  dialogue_disabled: 'Обмен сообщениями временно недоступен. Повторите запрос позже.',
+  message_unavailable: 'Сообщение недоступно в этом диалоге.',
+  rate_limited: 'Слишком много запросов. Повторите позже.',
+  access_already_enabled: 'Диалог уже существует. Для нового токена используйте rotate.',
 };
 export class OwnerError extends Error {
   constructor(code, details = {}) { super(code); this.code = code; this.details = details; }

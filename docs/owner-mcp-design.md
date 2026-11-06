@@ -1,5 +1,9 @@
 # MAGNT Owner B.1 — architecture and release decisions
 
+Historical B.1 contract. When C.1 is enabled, [the dialogue specification](mcp-dialogue-c1.md)
+supersedes the draft-only and read-without-receipt rules below. C.1 adds two public
+tools, one owner access tool, real publication and per-message read timestamps.
+
 ## Scope
 
 Three deployment units, one modular domain core and the existing D1 database.

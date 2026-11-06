@@ -11,6 +11,11 @@
   "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [{ "binding": "CONTACTS", "database_name": "magnt-contacts", "database_id": "${MAGNT_D1_DATABASE_ID}", "migrations_dir": "migrations" }],
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "${MAGNT_OAUTH_KV_ID}" }],
+  "ratelimits": [
+    { "name": "DIALOGUE_REQUEST_LIMIT", "namespace_id": "2001", "simple": { "limit": 120, "period": 60 } },
+    { "name": "DIALOGUE_READ_LIMIT", "namespace_id": "2002", "simple": { "limit": 30, "period": 60 } },
+    { "name": "DIALOGUE_WRITE_LIMIT", "namespace_id": "2003", "simple": { "limit": 10, "period": 60 } }
+  ],
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   "observability": { "enabled": true, "redact_query_string": true,
     "logs": { "enabled": true, "invocation_logs": false }, "traces": { "enabled": false } }

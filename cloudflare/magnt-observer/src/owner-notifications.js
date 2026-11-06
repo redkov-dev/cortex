@@ -1,4 +1,6 @@
 import { readObservedGoal } from './observations.js';
+import { readContactNotification } from './contacts.js';
+import { readDialogueNotification } from './dialogues.js';
 import { notificationText, sendTelegram } from './telegram-notifications.js';
 export { notificationText } from './telegram-notifications.js';
 
@@ -42,6 +44,7 @@ function configuration(env) {
   }
   return { token, chatId, from: new Date(from).toISOString(), preview, maxAttempts, delays,
     ownerEnabled: env.OWNER_MCP_ENABLED === 'true',
+    dialogueEnabled: env.DIALOGUE_READ_ENABLED === 'true',
     goalsEnabled: env.TELEGRAM_GOAL_NOTIFICATIONS_ENABLED === 'true' };
 }
 
@@ -147,13 +150,13 @@ export async function processOwnerNotifications(env, {
       const row = await claim(db, token, now(), config.maxAttempts, config.goalsEnabled);
       if (!row) break;
       const source = row.source_type === 'contact'
-        ? await db.prepare('SELECT contact_id, created_at, summary FROM contacts WHERE contact_id = ? AND self_reported_test = 0')
-          .bind(row.source_id).first()
+        ? await readContactNotification(db, row.source_id)
+        : row.source_type === 'dialogue_message' ? await readDialogueNotification(db, row.source_id)
         : row.source_type === 'observed_goal' ? await readObservedGoal(db, row.source_id) : null;
       if (now() + REQUEST_TIMEOUT_MS >= started + RUN_BUDGET_MS) break; // Lease permits a later retry.
       const result = row.source_type !== 'admin_test' && !source
         ? { ok: false, retryable: false, local: true, code: 'source_unavailable' }
-        : await sendTelegram(config, notificationText(row, source, config.preview, config.ownerEnabled), fetcher);
+        : await sendTelegram(config, notificationText(row, source, config.preview, config.ownerEnabled, config.dialogueEnabled), fetcher);
       const settled = settlement(row, now(), result, config);
       // Retain a known Telegram pause for the cleanup attempt if the batch rolls back.
       nextSendAt = settled.nextSendAt;

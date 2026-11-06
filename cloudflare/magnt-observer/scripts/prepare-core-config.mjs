@@ -9,5 +9,8 @@ if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(d1 ?? '') || !/^[0-9a
 const template = JSON.parse(await readFile('wrangler.core.jsonc', 'utf8'));
 template.d1_databases[0].database_id = d1;
 template.kv_namespaces[0].id = kv;
-await writeFile('wrangler.core.generated.json', JSON.stringify(template, null, 2) + '\n', { mode: 0o600 });
-console.log('Prepared core deployment with explicit existing storage bindings.');
+const dialogueMigration = process.argv.includes('--dialogue-migration');
+if (dialogueMigration) template.d1_databases[0].migrations_pattern = 'migrations/0007_dialogues.sql';
+await writeFile(dialogueMigration ? 'wrangler.dialogue-migration.generated.json' : 'wrangler.core.generated.json',
+  JSON.stringify(template, null, 2) + '\n', { mode: 0o600 });
+console.log(dialogueMigration ? 'Prepared migration 0007 only for existing storage.' : 'Prepared core deployment with explicit existing storage bindings.');

@@ -15,6 +15,7 @@
     "smoke": "node scripts/smoke.mjs",
     "metrics": "node scripts/shared-memory-metrics.mjs",
     "db:migrate": "wrangler d1 migrations apply CONTACTS --remote",
+    "db:migrate:dialogue": "node scripts/prepare-core-config.mjs --dialogue-migration && wrangler d1 migrations apply CONTACTS --remote --config wrangler.dialogue-migration.generated.json",
     "db:local": "wrangler d1 migrations apply CONTACTS --local --config wrangler.local.jsonc",
     "build:local": "node scripts/build-local.mjs",
     "deploy:core": "node scripts/prepare-core-config.mjs && wrangler deploy --config wrangler.core.generated.json",

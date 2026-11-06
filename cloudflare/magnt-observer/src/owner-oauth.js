@@ -40,7 +40,7 @@ const resourceServer = new OAuthResourceServer({
     }
     if (request.method === 'POST') {
       const body = await request.clone().json().catch(() => null);
-      if (body?.method === 'tools/call' && ['write_reply', 'update_inbox'].includes(body.params?.name)
+      if (body?.method === 'tools/call' && ['write_reply', 'update_inbox', 'manage_dialogue_access'].includes(body.params?.name)
           && !ctx.auth.scope.includes(OWNER_WRITE_SCOPE)) return insufficientScope(ctx.auth, [OWNER_READ_SCOPE, OWNER_WRITE_SCOPE]);
     }
     const event = { event_type: 'owner_mcp_request', time: new Date().toISOString(), event_id: crypto.randomUUID() };
