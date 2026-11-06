@@ -1,0 +1,31 @@
+name: Worker tests
+on:
+  pull_request:
+    paths:
+      - 'cloudflare/magnt-observer/**'
+      - '.github/workflows/worker-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/magnt-observer/**'
+      - '.github/workflows/worker-tests.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cloudflare/magnt-observer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloudflare/magnt-observer/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test

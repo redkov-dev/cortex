@@ -6,7 +6,7 @@ export const OWNER = 'https://owner.magnt.ru';
 export const meta = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
   'io.modelcontextprotocol/clientInfo': { name: 'owner-integration-test', version: '0.2.0' },
   'io.modelcontextprotocol/clientCapabilities': {} };
-export async function fixture(t, { overrides = {}, through = 6, gatewayLimit = 10000, loginLimit = 10000 } = {}) {
+export async function fixture(t, { overrides = {}, through = 6, gatewayLimit = 10000, loginLimit = 10000, dialogueReadLimit = 10000, dialogueWriteLimit = 10000, dialogueRequestLimit = 10000 } = {}) {
   const modules = {};
   const directory = process.env.MAGNT_TEST_BUNDLE ?? 'dist-local';
   for (const file of (await readdir(directory)).filter(n => n.endsWith('.js') || n.endsWith('.sql'))) {
@@ -52,7 +52,10 @@ export async function fixture(t, { overrides = {}, through = 6, gatewayLimit = 1
         OWNER_REQUEST_LIMIT: { type: 'rate-limit', namespace: '1001', simple: { limit: gatewayLimit, period: 60 } },
         OWNER_LOGIN_LIMIT: { type: 'rate-limit', namespace: '1002', simple: { limit: loginLimit, period: 60 } } }),
       worker('public-edge', 'public-test.js', { PUBLIC_CORE: { type: 'worker', worker: 'core', exportName: 'PublicApi' } }, { outboundService: outbound }),
-      worker('core', 'test-core.js', { CONTACTS: { type: 'd1', id: crypto.randomUUID() }, OAUTH_KV: { type: 'kv', id: crypto.randomUUID() }, ...textBindings }, { outboundService: outbound }),
+      worker('core', 'test-core.js', { CONTACTS: { type: 'd1', id: crypto.randomUUID() }, OAUTH_KV: { type: 'kv', id: crypto.randomUUID() },
+        DIALOGUE_REQUEST_LIMIT: { type: 'rate-limit', namespace: '2001', simple: { limit: dialogueRequestLimit, period: 60 } },
+        DIALOGUE_READ_LIMIT: { type: 'rate-limit', namespace: '2002', simple: { limit: dialogueReadLimit, period: 60 } },
+        DIALOGUE_WRITE_LIMIT: { type: 'rate-limit', namespace: '2003', simple: { limit: dialogueWriteLimit, period: 60 } }, ...textBindings }, { outboundService: outbound }),
       worker('control', 'control-test.js', { CONTROL: { type: 'worker', worker: 'core', exportName: 'TestControl' }, OWNER_DIRECT: { type: 'worker', worker: 'core', exportName: 'OwnerApi' } }),
     ] });
   t.after(() => mf.dispose());

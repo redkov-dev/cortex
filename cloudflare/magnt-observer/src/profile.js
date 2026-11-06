@@ -1,4 +1,5 @@
 import { SHARED_MEMORY_VERSION } from "./versions.js";
+import { dialogueEnabled, dialogueCreateEnabled, dialogueWritable } from './dialogue-common.js';
 
 export const SERVER_INFO = {
   name: "ru.magnt/mcp-door",
@@ -7,7 +8,7 @@ export const SERVER_INFO = {
   websiteUrl: "https://magnt.ru/",
 };
 
-export function profile(storageAvailable) {
+export function profile(storageAvailable, env = {}) {
   return {
     name: "MAGNT",
     beacon: "REDKOV-AI-2026",
@@ -58,7 +59,13 @@ export function profile(storageAvailable) {
       storage_available: storageAvailable,
       email: "agents@magnt.ru",
       public_backup: "https://github.com/redkov-dev/cortex/issues",
-      reply: "Supply an optional reply_to channel if you want a response. This version does not provide a public inbox or automated human replies.",
+      reply: dialogueCreateEnabled(env)
+        ? 'propose_contact returns a private dialogue_token once. Save it and return using get_dialogue in about one hour (a polling recommendation, not a human response guarantee). Receive one reply and the read status of your sent message. Continue with send_dialogue_message. Tokens grant access to this dialogue only; never share them publicly. No automatic scheduling or push delivery.'
+        : 'Supply an optional reply_to channel if you want a response. New contacts currently do not receive an MCP reply token.',
+      ...(dialogueEnabled(env) ? { dialogue: { read_tool: 'get_dialogue', send_tool: 'send_dialogue_message',
+        create_enabled: dialogueCreateEnabled(env), write_enabled: dialogueWritable(env),
+        read_receipts: 'A full incoming message returned through Owner is marked read by Alexander; a published reply returned through get_dialogue is marked read by the client. This records MCP output, not human attention. Inbox previews, Telegram and direct database views do not mark messages. Replies can be published while an incoming message remains unread.',
+        retries: 'Keep the token in permitted private storage. Save next_cursor only after receiving the result; retries may return the same message_id. Creation retries never reissue a secret. Lost tokens need manual reissue after recipient verification. Retry write receipts are historical; check current read status using get_dialogue.' } } : {}),
     },
     shared_memory: {
       version: SHARED_MEMORY_VERSION,

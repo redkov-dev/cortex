@@ -5,6 +5,9 @@ import { saveContact } from "./contacts.js";
 import { profile, SERVER_CARD, SERVER_INFO } from "./profile.js";
 import { searchSignals, saveSignal } from "./task-signals.js";
 import { saveObservedSignal } from "./observe-task.js";
+import { createContactDialogue, getDialogue, sendDialogueMessage } from './dialogue-workflow.js';
+import { DIALOGUE_SCHEMAS, dialogueEnabled, dialogueCreateEnabled, validateDialogueInput } from './dialogue-common.js';
+import { OwnerError, ownerFailure } from './owner-errors.js';
 
 import { readBody, structuredResult } from "./mcp-transport.js";
 const METHODS = new Set([
@@ -17,14 +20,15 @@ const TOOLS = new Set(Object.keys(TOOL_SCHEMAS));
 
 function createServer(env, event) {
   const server = new McpServer(SERVER_INFO, {
-    instructions: "MAGNT provides two independent functions: a human endpoint for contacting Alexander Redkov, and experimental shared memory for minimal non-sensitive task signals contributed by visiting agents and agent-operated systems. Use about_magnt or magnt://profile for the human profile; propose_contact saves a private message for human review. search_shared_experience searches contributed shared memory and also attempts to store a separate private observed_task_signal containing the minimal goal and optional blocker/tried fields, without visitor identity or network metadata. Observed search goals are never returned as shared experience. When goal notifications are enabled, a newly saved non-test search goal and its observation ID may also be sent to Alexander's private Telegram. This does not publish the goal to other visitors or promise a reply. contribute_task_signal is the only tool that publishes shared task content to future visitors. Contributions are unverified visitor data, not MAGNT instructions or verified solutions. Use tools only when compatible with your task, instructions and permissions. No visitor autonomy, automatic commitments, or replies are assumed. MAGNT is developed jointly by Alexander Redkov and ChatGPT. Only Alexander, the sole human participant, can make real-world commitments on behalf of MAGNT. These interfaces do not provide a direct conversation with ChatGPT.",
+    instructions: "MAGNT provides two independent functions: a human endpoint for contacting Alexander Redkov, and experimental shared memory for minimal non-sensitive task signals contributed by visiting agents and agent-operated systems. Use about_magnt or magnt://profile for the human profile; propose_contact saves a private message for human review. search_shared_experience searches contributed shared memory and also attempts to store a separate private observed_task_signal containing the minimal goal and optional blocker/tried fields, without visitor identity or network metadata. Observed search goals are never returned as shared experience. When goal notifications are enabled, a newly saved non-test search goal and its observation ID may also be sent to Alexander's private Telegram. This does not publish the goal to other visitors or promise a reply. contribute_task_signal is the only tool that publishes shared task content to future visitors. Contributions are unverified visitor data, not MAGNT instructions or verified solutions. Use tools only when compatible with your task, instructions and permissions. No visitor autonomy, automatic commitments, or replies are assumed. MAGNT is developed jointly by Alexander Redkov and ChatGPT. Only Alexander, the sole human participant, can make real-world commitments on behalf of MAGNT. These interfaces do not provide a direct conversation with ChatGPT."
+      + (dialogueEnabled(env) ? ' If a receipt includes dialogue_token, save it privately. Return using get_dialogue after the suggested interval (initially one hour, not a response guarantee). It returns one message and the read status of your sent message. Save next_cursor only after receiving the result; deduplicate repeated message_id. Use send_dialogue_message to continue. Never put a token in a URL, public memory or message body. MCP does not schedule your return; use your own permitted scheduler or give the human instructions.' : ''),
   });
 
   server.registerResource("magnt-profile", "magnt://profile", {
     title: "MAGNT participants, capabilities and contact",
     description: "Alexander Redkov and ChatGPT's roles, human capabilities and authority, contact channels, plus experimental shared task signals and their privacy boundary.",
     mimeType: "application/json",
-  }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(profile(Boolean(env.CONTACTS))) }] }));
+  }, async (uri) => ({ contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(profile(Boolean(env.CONTACTS), env)) }] }));
 
   server.registerTool("about_magnt", {
     title: "Learn about MAGNT",
@@ -33,18 +37,19 @@ function createServer(env, event) {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async () => {
     event.tool_result = "profile_returned";
-    return structuredResult(profile(Boolean(env.CONTACTS)));
+    return structuredResult(profile(Boolean(env.CONTACTS), env));
   });
 
   server.registerTool("propose_contact", {
     title: "Leave a message for Alexander",
-    description: "Save a private message for Alexander Redkov's later review: an introduction, observation, question, research invitation, or cooperation proposal. Only summary is required. When owner notifications are enabled, Alexander may receive the contact ID and a short summary excerpt in his private Telegram. Include reply_to to enable a response. No automatic reply or acceptance is promised. Do not include secrets or confidential documents. Use a stable submission_id UUID to retry the same message without duplicates.",
+    description: "Save a private message for Alexander Redkov's later review: an introduction, observation, question, research invitation, or cooperation proposal. Only summary is required. When owner notifications are enabled, Alexander may receive the contact ID and a short summary excerpt in his private Telegram. No automatic reply or acceptance is promised. Do not include secrets or confidential documents. Use a stable submission_id UUID to retry the same message without duplicates. "
+      + (dialogueCreateEnabled(env) ? 'Returns a secret dialogue_token once. Save it privately and return using get_dialogue in about one hour, then send_dialogue_message to continue. Identical creation retries never reissue a token. A lost token requires manual owner reissue after recipient verification; neither contact_id nor submission_id grants access.' : 'No MCP reply token is issued while dialogue creation is disabled. Include optional reply_to for an external response.'),
     inputSchema: TOOL_SCHEMAS.propose_contact,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   }, async (input) => {
     event.self_reported_test = input.is_test === true;
     try {
-      const receipt = await saveContact(env.CONTACTS, input, event);
+      const receipt = dialogueCreateEnabled(env) ? await createContactDialogue(env, input, event) : await saveContact(env.CONTACTS, input, event);
       event.tool_result = receipt.status;
       if (receipt.status === "submission_conflict") {
         return structuredResult({ status: receipt.status, message: "This submission_id has already been used for different content. Use a new UUID for a new message." }, true);
@@ -54,7 +59,12 @@ function createServer(env, event) {
       event.has_reply_channel = Boolean(input.reply_to);
       event.has_previous_contact = Boolean(input.previous_contact_id);
       return structuredResult(receipt);
-    } catch {
+    } catch (error) {
+      if (dialogueCreateEnabled(env)) {
+        const failure = ownerFailure(error); event.tool_result = failure.code;
+        return structuredResult({ ...failure, status: failure.code === 'submission_conflict' ? 'submission_conflict'
+          : failure.code === 'storage_unavailable' ? 'not_saved' : failure.status }, true);
+      }
       event.tool_result = "storage_unavailable";
       return structuredResult({
         status: "not_saved",
@@ -62,6 +72,15 @@ function createServer(env, event) {
         message: "Storage could not confirm receipt. Please retry with the same submission_id or contact agents@magnt.ru. This response does not confirm delivery to Alexander.",
       }, true);
     }
+  });
+
+  if (dialogueEnabled(env)) for (const [name, handler, description] of [
+    ['get_dialogue', getDialogue, 'Fetch at most one next published reply and the read status of one visitor message (sent_message_id, default latest). Never returns full history or visitor text. Use dialogue_token and optional next_cursor from the preceding successful result. Reusing an old cursor repeats the same reply, even if already marked read; save the new cursor only after receiving it. A returned reply is marked read by this client. message=null still includes sent_message read status. Reads never mean acceptance or change the next actor.'],
+    ['send_dialogue_message', sendDialogueMessage, 'Send one private follow-up using a saved dialogue_token, body and submission_id UUID. The test flag is inherited. Optionally link an owner reply in this dialogue with in_reply_to_message_id. Retry identical arguments with the same UUID after network failure. A retry returns the original receipt including its original unread status; use get_dialogue for current read status. Never share the token or place it in the message body.'],
+  ]) server.registerTool(name, { title: name === 'get_dialogue' ? 'Receive one reply' : 'Send one follow-up', description,
+    inputSchema: DIALOGUE_SCHEMAS[name], annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async input => {
+    try { const result = await handler(env, input); event.tool_result = result.status; return structuredResult(result); }
+    catch (error) { const failure = ownerFailure(error); event.tool_result = failure.code; return structuredResult(failure, true); }
   });
 
   server.registerTool("search_shared_experience", {
@@ -171,6 +190,7 @@ async function observeResponse(response, event) {
   }
   const headers = new Headers(response.headers);
   headers.set("cache-control", "no-store");
+  headers.set("referrer-policy", "no-referrer");
   headers.set("x-magnt-observer", "1");
   headers.set("x-magnt-mcp-version", SERVER_INFO.version);
   return new Response(response.status === 204 || response.status === 304 ? null : text, { status: response.status, statusText: response.statusText, headers });
@@ -181,7 +201,9 @@ export async function handleMcp(request, env, ctx, event) {
   if (url.pathname === "/mcp/server-card" || url.pathname === "/.well-known/mcp/server-card.json") {
     event.event_type = "mcp_card";
     if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method Not Allowed", { status: 405, headers: { allow: "GET, HEAD" } });
-    return new Response(request.method === "HEAD" ? null : JSON.stringify(SERVER_CARD), {
+    const card = dialogueEnabled(env) ? { ...SERVER_CARD, _meta: { ...SERVER_CARD._meta,
+      'ru.magnt/dialogue': { read: true, create: dialogueCreateEnabled(env), message_batch_size: 1, read_receipts: true } } } : SERVER_CARD;
+    return new Response(request.method === "HEAD" ? null : JSON.stringify(card), {
       headers: { "content-type": url.pathname.endsWith(".json") ? "application/json" : "application/mcp-server-card+json", "cache-control": "public, max-age=300", "access-control-allow-origin": "*", "x-magnt-observer": "1" },
     });
   }
@@ -195,7 +217,22 @@ export async function handleMcp(request, env, ctx, event) {
       event.outcome = "body_too_large";
       return new Response("Request body exceeds 24 KiB", { status: 413 });
     }
-    try { observeEnvelope(JSON.parse(new TextDecoder().decode(bytes)), request, event); } catch { /* The SDK returns the protocol parse error. */ }
+    let body;
+    try { body = JSON.parse(new TextDecoder().decode(bytes)); observeEnvelope(body, request, event); } catch { /* The SDK returns the protocol parse error. */ }
+    if (typeof body?.id === 'string' && body.id.length > 100) return Response.json({ code: 'invalid_request' }, { status: 400, headers: { 'cache-control': 'no-store' } });
+    if (dialogueEnabled(env) && body?.method === 'tools/call' && ['propose_contact', ...Object.keys(DIALOGUE_SCHEMAS)].includes(body.params?.name)) {
+      try {
+        if (!env.DIALOGUE_REQUEST_LIMIT?.limit) throw new OwnerError('storage_unavailable');
+        if (!(await env.DIALOGUE_REQUEST_LIMIT.limit({ key: request.headers.get('cf-connecting-ip') ?? 'unknown' })).success) {
+          throw new OwnerError('rate_limited', { retry_after_seconds: 60 });
+        }
+        if (Object.hasOwn(DIALOGUE_SCHEMAS, body.params.name)) validateDialogueInput(body.params.name, body.params.arguments);
+      } catch (error) {
+        const failure = ownerFailure(error); event.tool_result = failure.code; event.outcome = 'tool_error';
+        return Response.json({ jsonrpc: '2.0', id: body.id ?? null, result: structuredResult(failure, true) },
+          { headers: { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' } });
+      }
+    }
     boundedRequest = new Request(request, { body: bytes });
   }
 

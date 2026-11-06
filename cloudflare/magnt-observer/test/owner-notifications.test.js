@@ -17,9 +17,13 @@ function telegramOk(chatId = settings.TELEGRAM_OWNER_CHAT_ID, messageId = 42) {
 }
 
 async function migrate(db) {
+  // Model Wrangler's once-per-file migration history, including ALTER TABLE migrations.
+  await db.prepare('CREATE TABLE IF NOT EXISTS d1_migrations (name TEXT PRIMARY KEY)').run();
   for (const name of (await readdir('migrations')).filter((n) => n.endsWith('.sql')).sort()) {
+    if (await db.prepare('SELECT name FROM d1_migrations WHERE name = ?').bind(name).first()) continue;
     const sql = await readFile(`migrations/${name}`, 'utf8');
-    for (const statement of sql.replace(/--[^\n]*/g, '').split(';').filter((s) => s.trim())) await db.prepare(statement).run();
+    await db.batch([...sql.replace(/--[^\n]*/g, '').split(';').filter((s) => s.trim()).map(statement => db.prepare(statement)),
+      db.prepare('INSERT INTO d1_migrations (name) VALUES (?)').bind(name)]);
   }
 }
 

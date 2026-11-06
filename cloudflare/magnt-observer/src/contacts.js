@@ -1,5 +1,3 @@
-import schema from "../migrations/0001_contacts.sql";
-
 const initialized = new WeakMap();
 
 async function ensureTable(db) {
@@ -7,7 +5,7 @@ async function ensureTable(db) {
   // The same idempotent schema is available as an ordinary Wrangler migration.
   let ready = initialized.get(db);
   if (!ready) {
-    ready = db.prepare(schema).run().then((result) => {
+    ready = import('../migrations/0001_contacts.sql').then(({ default: schema }) => db.prepare(schema).run()).then((result) => {
       if (!result.success) throw new Error("Schema unavailable");
     }).catch((error) => {
       initialized.delete(db);
@@ -95,5 +93,40 @@ export async function listContactSources(db, { before, includeTests = false, lim
   }
   const rows = (await db.prepare("SELECT contact_id AS source_id, created_at, substr(summary, 1, 300) AS summary, self_reported_test FROM contacts WHERE "
     + where.join(' AND ') + ' ORDER BY created_at DESC, contact_id DESC LIMIT ?').bind(...args, limit).all()).results;
+  return rows.map(row => ({ ...row, source_type: 'contact' }));
+}
+
+// C.1 prepared operations keep SQL ownership here while workflows compose a batch.
+export async function prepareContact(db, input, client) {
+  const content = { summary: input.summary, intent: input.intent ?? null, what_you_need_from_human: input.what_you_need_from_human ?? null,
+    agent_identity: input.agent_identity ?? null, operator: input.operator ?? null, reply_to: input.reply_to ?? null,
+    found_via: input.found_via ?? null, previous_contact_id: input.previous_contact_id ?? null, self_reported_test: input.is_test ? 1 : 0 };
+  const payloadHash = await hash(JSON.stringify(content));
+  const id = 'mc_' + crypto.randomUUID(), time = new Date().toISOString(), submission = input.submission_id ?? crypto.randomUUID();
+  const statement = db.prepare(`INSERT INTO contacts (contact_id, created_at, summary, intent, what_you_need_from_human,
+    agent_identity, operator, reply_to, found_via, previous_contact_id, self_reported_test, submission_id, payload_hash,
+    client_name, client_version, protocol_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(submission_id) DO NOTHING`).bind(id, time, content.summary, content.intent, content.what_you_need_from_human,
+    content.agent_identity, content.operator, content.reply_to, content.found_via, content.previous_contact_id, content.self_reported_test,
+    submission, payloadHash, client.client_name ?? null, client.client_version ?? null, client.mcp_protocol_version ?? null);
+  return { id, time, submission, payloadHash, statement, content, source_type: 'contact', source_id: id };
+}
+export async function findContactSubmission(db, submission) {
+  return db.prepare('SELECT contact_id, created_at, payload_hash FROM contacts WHERE submission_id = ?').bind(submission).first();
+}
+export function newContactGate(contact) { return { sql: 'EXISTS (SELECT 1 FROM contacts WHERE contact_id = ?)', args: [contact.id] }; }
+export function prepareContactProjection(db, contactId, time, summary, gate) {
+  return db.prepare(`UPDATE contacts SET last_incoming_at = ?, last_incoming_summary = ? WHERE contact_id = ? AND ${gate.sql}`)
+    .bind(time, summary.slice(0, 300), contactId, ...gate.args);
+}
+export async function readContactNotification(db, id) {
+  return db.prepare('SELECT contact_id, created_at, summary FROM contacts WHERE contact_id = ? AND self_reported_test = 0').bind(id).first();
+}
+export async function listDialogueContactSources(db, { before, includeTests = false, limit = 51 } = {}) {
+  const where = ['(? = 1 OR self_reported_test = 0)']; const args = [includeTests ? 1 : 0];
+  if (before) { where.push('(COALESCE(last_incoming_at, created_at) < ? OR (COALESCE(last_incoming_at, created_at) = ? AND contact_id < ?))'); args.push(before.time, before.time, before.id); }
+  const rows = (await db.prepare(`SELECT contact_id AS source_id, COALESCE(last_incoming_at, created_at) AS created_at,
+    substr(COALESCE(last_incoming_summary, summary),1,300) AS summary, self_reported_test FROM contacts
+    WHERE ${where.join(' AND ')} ORDER BY COALESCE(last_incoming_at, created_at) DESC, contact_id DESC LIMIT ?`).bind(...args,limit).all()).results;
   return rows.map(row => ({ ...row, source_type: 'contact' }));
 }

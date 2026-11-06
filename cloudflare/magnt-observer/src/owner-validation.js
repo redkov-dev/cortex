@@ -10,8 +10,9 @@ export const OWNER_SCHEMAS = {
     cursor: cursor.optional(), limit: z.number().int().min(1).max(50).default(20) }),
   read_conversation: z.strictObject({ reference: id, cursor: cursor.optional(), limit: z.number().int().min(1).max(50).default(20) }),
   write_reply: z.strictObject({ ...write, mode: z.enum(['draft', 'publish']),
-    body: z.string().trim().min(1).max(8000).regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]*$/u), reply_id: id.optional() }),
+    body: z.string().trim().min(1).max(8000).regex(/^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]*$/u), reply_id: id.optional(), in_reply_to_message_id: id.optional() }),
   update_inbox: z.strictObject({ ...write, action: z.enum(['acknowledge', 'archive', 'restore']), through_event_id: id.optional() }),
+  manage_dialogue_access: z.strictObject({ ...write, action: z.enum(['enable', 'rotate', 'revoke']) }),
 };
 export function validateOwnerInput(tool, value) {
   const schema = OWNER_SCHEMAS[tool];

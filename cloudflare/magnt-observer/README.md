@@ -1,5 +1,11 @@
 # MAGNT Observer + MCP Door v0.2 / Shared Task Signals v0.2
 
+**C.1 (separate activation):** token-protected dialogue, one reply per public
+fetch and per-message read receipts are implemented behind default-off flags.
+See [contracts](../../docs/mcp-dialogue-c1.md) and
+[manual activation](../../docs/mcp-dialogue-c1-rollout.md). When enabled, these
+rules supersede the older draft-only and no-public-reply descriptions below.
+
 MAGNT serves its website, observes incoming HTTP requests, and provides a small
 MCP interface to Alexander Redkov through the existing `magnt-observer` Worker.
 It also exposes a minimal A2A v1 discovery bridge that directs visiting agents to

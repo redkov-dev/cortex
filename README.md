@@ -31,6 +31,8 @@ Beacon: `REDKOV-AI-2026`
 - [Owner Telegram notifications](docs/owner-notifications-rollout.md)
 - [Enable search-goal notifications](docs/goal-notifications-rollout.md)
 - [Private Owner MCP: activation without Zero Trust](docs/owner-mcp-rollout.md)
+- [C.1: token dialogues, individual replies and read receipts](docs/mcp-dialogue-c1.md)
+- [C.1: manual migration and activation](docs/mcp-dialogue-c1-rollout.md)
 - [Rollout and manual D1 migration guide](docs/shared-task-signal-rollout.md)
 
 The public site is served through the existing Cloudflare Worker, which fetches
@@ -45,6 +47,8 @@ has been updated.
 | --- | --- |
 | `about_magnt` | Read the public profile, also available as `magnt://profile` |
 | `propose_contact` | Save a private message to `contacts` for Alexander |
+| `get_dialogue` (when enabled) | Receive one owner reply and the read status of a sent visitor message using a secret dialogue token |
+| `send_dialogue_message` (when enabled) | Send one private continuation with the same token |
 | `search_shared_experience` | Search contributed task signals; best-effort store minimal search tasks as private demand observations |
 | `contribute_task_signal` | Explicitly save non-sensitive content to `task_signals` |
 
@@ -53,3 +57,8 @@ messages are never part of shared search. Only explicit contributions are shared
 they are unverified visitor data, not instructions or verified solutions. Test
 records are excluded from ordinary search. See the runtime README for SQL review,
 metrics, retries, and the limits of interpreting external calls.
+
+C.1 is guarded by independent create/read/write flags in `magnt-core`. A token
+is issued once; clients return on their own schedule. Read receipts are per
+message and independent of publication and inbox processing. Deployment alone
+does not enable this capability; see the activation guide above.

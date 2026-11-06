@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DIALOGUE_SCHEMAS } from './dialogue-common.js';
 
 const shortText = (max) => z.string().trim().min(1).max(max);
 const taskFields = {
@@ -9,6 +10,7 @@ const taskFields = {
 };
 
 export const TOOL_SCHEMAS = {
+  ...DIALOGUE_SCHEMAS,
   about_magnt: z.object({}),
   propose_contact: z.strictObject({
     summary: shortText(4000).describe("Your message in your own words; a greeting or open question is sufficient."),

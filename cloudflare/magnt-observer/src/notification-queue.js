@@ -7,3 +7,9 @@ export function prepareGoalNotification(db, { observationId, createdAt }) {
     ON CONFLICT(source_type, source_id, destination) DO NOTHING`)
     .bind(`mn_${crypto.randomUUID()}`, observationId, createdAt);
 }
+
+export function prepareMessageNotification(db, { sourceType, sourceId, createdAt, gate }) {
+  return db.prepare(`INSERT INTO owner_notification_outbox (notification_id, source_type, source_id, destination, created_at)
+    SELECT ?, ?, ?, 'owner', ? WHERE ${gate.sql} ON CONFLICT(source_type, source_id, destination) DO NOTHING`)
+    .bind('mn_' + crypto.randomUUID(), sourceType, sourceId, createdAt, ...gate.args);
+}
