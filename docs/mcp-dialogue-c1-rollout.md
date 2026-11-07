@@ -48,9 +48,18 @@ WHERE type = 'table' AND name IN ('owner_inbox', 'owner_replies', 'owner_operati
 
 Это можно сделать через уже настроенный Cloudflare Builds без локального терминала:
 
-1. **magnt-core → Settings → Build → Deploy command**: временно поставь
+1. В **magnt-core → Settings → Build** оставь **Build command** пустым:
+   `deploy:core` сам собирает ядро. Команда `npm run build` здесь запускает пробную
+   сборку старой конфигурации `magnt-observer` и вызывает предупреждение об имени Worker.
+   В поле **Deploy command** временно поставь
    **`npm run db:migrate:dialogue && npm run deploy:core`**.
-2. Запусти сборку `main` с коммитом C.1. Существующие Build variables
+2. Открой **magnt-core → Deployments**, прокрути ниже списка версий и нажми
+   **View build history**. Найди сборку `main` с коммитом C.1, открой её и нажми
+   **Retry build**; та же команда доступна через **⋯** рядом со сборкой.
+   Номер **Version ID** в списке Deployments — идентификатор версии Cloudflare,
+   он отличается от GitHub commit SHA. **View rollout history** показывает
+   историю переключения версий, а журнал сборок находится в **View build history**.
+   Существующие Build variables
    `MAGNT_D1_DATABASE_ID` и `MAGNT_OAUTH_KV_ID` уже используются этим Worker.
 3. Проверь в логе успешную миграцию **только `0007_dialogues.sql`** и успешную
    выкладку ядра. Если доступ сборки к D1 отклонён, флаги пока не включай:
@@ -74,8 +83,10 @@ PRAGMA foreign_key_check;
 
 ## 3. Развернуть ядро
 
-В **magnt-core → Builds** разверни `main` с коммитом C.1.
-Root directory остаётся `cloudflare/magnt-observer`, Deploy command —
+В **magnt-core → Deployments → View build history** разверни `main` с коммитом C.1.
+Если предыдущий шаг завершился успешной миграцией и строкой
+`Deployed magnt-core triggers`, ядро уже развёрнуто: повторная сборка не нужна.
+Root directory остаётся `cloudflare/magnt-observer`, **Build command** пустой, Deploy command —
 **`npm run deploy:core`**. Проверь успешную сборку и сохранение прежних D1/KV
 bindings. Конфигурация добавляет три Rate Limiting binding:
 
@@ -102,8 +113,13 @@ bindings. Конфигурация добавляет три Rate Limiting bindi
 
 `OWNER_MCP_ENABLED` и `OWNER_MCP_WRITE_ENABLED` должны уже быть `true` для
 публикации. Публичный MCP теперь объявляет шесть инструментов, Owner — пять.
-Обнови список инструментов у подключённых MCP-приложений; если клиент показывает
-старый список, переподключи соответствующее приложение. Новые OAuth scopes не
+В [ChatGPT Plugins](https://chatgpt.com/plugins) открой подключение **MAGNT** и
+нажми **Refresh / Обновить**. Повтори для **OWNER_M**. Проверь появление
+`get_dialogue` и `send_dialogue_message` у MAGNT, `manage_dialogue_access` у Owner;
+также обновляются описания существующих инструментов. Для контрольного вызова
+используй новый чат с обновлёнными подключениями
+([инструкция OpenAI](https://developers.openai.com/plugins/deploy/connect-chatgpt#refresh-metadata)).
+Новые OAuth scopes не
 требуются. После включения полное чтение через Owner ставит отметку «прочитано».
 
 ## 5. Проверить на одной тестовой переписке
