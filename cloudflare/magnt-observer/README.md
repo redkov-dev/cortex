@@ -419,6 +419,15 @@ Exclude known controlled UA traffic and all self-reported tests; traffic without
 those labels is only a candidate external set. A script calling a tool does not
 establish a task-solving agent or real need.
 
+**Scope-specific evidence rule (MAGNT):** a website visit, MCP request, bot
+connection or agent contact is a technical observation, **not by itself proof of
+real demand for MAGNT**, an independent visitor, an interested customer or a
+willing counterparty. Keep controlled tests, automated discovery, repeated calls,
+qualified dialogue and actual cooperation separate. Describe demand as confirmed
+only when specific evidence supports the claim, not merely when traffic exists.
+This criterion belongs to MAGNT's own measurement and qualification process,
+not to the general operating instructions of other agent projects.
+
 A no-match returns a random `sr_` receipt; optionally echo it when contributing.
 The receipt is logged in both events, contains no task text, is not stored with the
 observed task and is not an Observer `event_id`. It is not signed, identity or
