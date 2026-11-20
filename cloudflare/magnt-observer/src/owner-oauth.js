@@ -59,6 +59,8 @@ const resourceServer = new OAuthResourceServer({
     }
     if (request.method === 'POST') {
       const body = await request.clone().json().catch(() => null);
+      if (body?.method === 'tools/call' && ['list_owner_grants', 'revoke_owner_grant'].includes(body.params?.name)
+          && actor.ownerClientClass !== 'chatgpt') return privateJson({ code: 'forbidden' }, 403);
       if (body?.method === 'tools/call' && ['write_reply', 'update_inbox', 'manage_dialogue_access', 'list_owner_grants', 'revoke_owner_grant'].includes(body.params?.name)
           && !ctx.auth.scope.includes(OWNER_WRITE_SCOPE)) return insufficientScope(ctx.auth, [OWNER_READ_SCOPE, OWNER_WRITE_SCOPE]);
     }
