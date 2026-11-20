@@ -25,6 +25,7 @@ export function ownerActor(env, auth, props) {
   }
   if (!auth.scope?.includes(OWNER_READ_SCOPE)) throw new OwnerAuthError('insufficient_scope', 403);
   return { verified: true, id: 'github|' + config.subject, subject: config.subject,
+    ownerClientClass: props?.ownerClientClass === 'local' ? 'local' : 'chatgpt',
     canWrite: config.canWrite && auth.scope.includes(OWNER_WRITE_SCOPE) };
 }
 export function isChatGptRedirect(value) {
