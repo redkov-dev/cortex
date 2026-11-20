@@ -19,7 +19,7 @@ const form = (f, route, fields, headers = {}) => f.edge.fetch(OWNER + route, {
 });
 async function registeredFixture(t) {
   const f = await fixture(t, { through: 8, overrides: { OWNER_LOCAL_CLIENT_SEED_ENABLED: 'true',
-    OWNER_LOCAL_CLIENT_ENABLED: 'true' } });
+    OWNER_LOCAL_CLIENT_ENABLED: 'true', OWNER_DCR_ENABLED: 'false' } });
   const response = await f.control.fetch('https://fixture.local/seed-local', { method: 'POST', body: '{}' });
   const client = await response.json();
   assert.equal(response.status, 200, JSON.stringify(client));
