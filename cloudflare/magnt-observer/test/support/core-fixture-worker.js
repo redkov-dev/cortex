@@ -29,7 +29,8 @@ export class TestControl extends WorkerEntrypoint {
     const { redirectTo } = await api.completeAuthorization({
       request: { responseType: 'code', clientId: client.clientId, redirectUri: client.redirectUris[0],
         resource: OWNER_RESOURCE, issuer: OWNER_ORIGIN, scope, state: 'test', codeChallenge, codeChallengeMethod: 'S256' },
-      userId: options.userId ?? '1', metadata: {}, scope, props: { ownerId: options.userId ?? '1', epoch: options.epoch ?? '1' },
+      userId: options.userId ?? '1', metadata: {}, scope, props: { ownerId: options.userId ?? '1', epoch: options.epoch ?? '1',
+        ...(options.ownerClientClass ? { ownerClientClass: options.ownerClientClass } : {}) },
     });
     const response = await issuer.fetch(new Request(OWNER_ORIGIN + '/oauth/token', {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
