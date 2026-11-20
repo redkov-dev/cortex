@@ -187,7 +187,7 @@ export async function runOwnerOperation(env, actor, tool, rawInput) {
   const input = validateOwnerInput(tool, rawInput);
   // Full existing Owner capabilities are available to local agents, but OAuth grant management is not.
   if (tool === 'list_owner_grants' || tool === 'revoke_owner_grant') {
-    if (actor.ownerClientClass === 'local') throw new OwnerError('forbidden');
+    if (actor.ownerClientClass !== 'chatgpt') throw new OwnerError('forbidden');
     return tool === 'list_owner_grants' ? listLocalGrants(env) : revokeLocalGrant(env, input.grant_id);
   }
   const db = env.CONTACTS;
