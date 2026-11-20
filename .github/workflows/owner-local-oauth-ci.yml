@@ -1,0 +1,25 @@
+name: Owner Local OAuth tests
+on:
+  pull_request:
+    paths:
+      - 'cloudflare/magnt-observer/**'
+      - '.github/workflows/owner-local-oauth-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: cloudflare/magnt-observer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloudflare/magnt-observer/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
