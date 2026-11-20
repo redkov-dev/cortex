@@ -1,7 +1,7 @@
 import { AuthorizationError, authorizationErrorRedirect } from '@cloudflare/workers-oauth-provider';
 import { OWNER_ORIGIN, OWNER_RESOURCE, OWNER_SCOPES, isChatGptRedirect, isAllowedClientId, privateJson } from './owner-auth.js';
 import { readBody } from './mcp-transport.js';
-import { isRegisteredLocalClient, issueLocalGrant, registeredLocalClient } from './owner-local.js';
+import { isRegisteredLocalClient, issueLocalGrant, activateLocalGrant, abandonLocalGrant } from './owner-local.js';
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const base64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -115,8 +115,17 @@ export async function handleOwnerLogin(request, env, oauth) {
         props.localClientId = original.clientId;
         props.localGrantId = await issueLocalGrant(env, original, ownerId, approvedScope);
       }
-      const { redirectTo } = await oauth.completeAuthorization({ request: original, userId: ownerId, metadata: {},
-        scope: approvedScope, props });
+      let redirectTo;
+      try {
+        ({ redirectTo } = await oauth.completeAuthorization({ request: original, userId: ownerId, metadata: {},
+          scope: approvedScope, props }));
+        if (local) await activateLocalGrant(env, props.localGrantId);
+      } catch (error) {
+        if (local) {
+          try { await abandonLocalGrant(env, props.localGrantId); } catch { /* inactive grant fails closed */ }
+        }
+        throw error;
+      }
       return redirect(headers, redirectTo);
     }
     return privateJson({ code: 'not_found' }, 404);
