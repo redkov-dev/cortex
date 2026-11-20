@@ -19,7 +19,8 @@ const form = (f, route, fields, headers = {}) => f.edge.fetch(OWNER + route, {
 });
 async function registeredFixture(t) {
   const f = await fixture(t, { through: 8, overrides: { OWNER_LOCAL_CLIENT_SEED_ENABLED: 'true',
-    OWNER_LOCAL_CLIENT_ENABLED: 'true', OWNER_DCR_ENABLED: 'false' } });
+    OWNER_LOCAL_CLIENT_ENABLED: 'true', OWNER_DCR_ENABLED: 'false',
+    DIALOGUE_CREATE_ENABLED: 'true', DIALOGUE_READ_ENABLED: 'true', DIALOGUE_WRITE_ENABLED: 'true' } });
   const response = await f.control.fetch('https://fixture.local/seed-local', { method: 'POST', body: '{}' });
   const client = await response.json();
   assert.equal(response.status, 200, JSON.stringify(client));
@@ -81,18 +82,21 @@ test('pre-registered local owner receives all five existing tools and can revoke
   assert.ok(!tools.includes('list_owner_grants'));
   assert.ok(!tools.includes('revoke_owner_grant'));
   assert.equal((await f.raw('tools/call', { name: 'write_reply', arguments: {} }, { token: tokens.access_token })).status, 200);
-  const list = await f.call('list_owner_grants', {});
+  // Even a full local write scope does not authorize OAuth grant management.
+  assert.equal((await f.raw('tools/call', { name: 'list_owner_grants', arguments: {} }, { token: tokens.access_token })).status, 403);
+  const primary = await f.mint({ ownerClientClass: 'chatgpt' });
+  const list = await f.call('list_owner_grants', {}, { token: primary.access_token });
   assert.ok(list.value?.grants?.length, JSON.stringify(list.value));
   const grant = list.value.grants[0];
   assert.equal(grant.client_id, client.clientId);
   assert.ok(grant.expires_at - grant.issued_at <= 90 * 86400);
-  const revoked = await f.call('revoke_owner_grant', { grant_id: grant.grant_id });
+  const revoked = await f.call('revoke_owner_grant', { grant_id: grant.grant_id }, { token: primary.access_token });
   assert.equal(revoked.value.status, 'revoked');
   assert.equal((await f.raw('tools/list', {}, { token: tokens.access_token })).status, 403);
   const refresh = await form(f, '/oauth/token', { grant_type: 'refresh_token',
     client_id: client.clientId, refresh_token: tokens.refresh_token, resource: OWNER + '/mcp' });
   assert.equal(refresh.status, 400);
-  assert.equal((await f.raw('tools/list', {}, { token: f.credentials.access_token })).status, 200);
+  assert.equal((await f.raw('tools/list', {}, { token: primary.access_token })).status, 200);
 });
 
 test('local consent respects explicit downgrade to read and rejects write', { timeout: 60000 }, async t => {
