@@ -66,6 +66,10 @@ export async function handleOwnerLogin(request, env, oauth) {
         || await isRegisteredLocalClient(env, identifier, incomingRedirect))) {
         return privateJson({ code: 'invalid_client' }, 400);
       }
+      if (await isRegisteredLocalClient(env, identifier, incomingRedirect)
+          && url.searchParams.getAll('resource').length !== 1) {
+        return privateJson({ code: 'invalid_target' }, 400);
+      }
       const parsed = await oauth.parseAuthRequest(request);
       if (!await allowedRequest(parsed, env)) return privateJson({ code: 'invalid_authorization_request' }, 400);
       const details = await oauth.describeConsent(parsed);
@@ -118,7 +122,7 @@ export async function handleOwnerLogin(request, env, oauth) {
       let redirectTo;
       try {
         ({ redirectTo } = await oauth.completeAuthorization({ request: original, userId: ownerId, metadata: {},
-          scope: approvedScope, props }));
+          scope: approvedScope, props, revokeExistingGrants: !local }));
         if (local) await activateLocalGrant(env, props.localGrantId);
       } catch (error) {
         if (local) {
