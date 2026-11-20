@@ -50,17 +50,32 @@ export async function issueLocalGrant(env, request, ownerId, scope) {
   return grantId;
 }
 
+export async function activateLocalGrant(env, grantId) {
+  if (!env.CONTACTS) throw new OwnerAuthError('forbidden', 403);
+  const result = await env.CONTACTS.prepare(
+    'UPDATE owner_local_grants SET activated_at = ? WHERE grant_id = ? AND activated_at IS NULL AND revoked_at IS NULL'
+  ).bind(nowSeconds(), grantId).run();
+  if (result.meta?.changes !== 1) throw new OwnerAuthError('forbidden', 403);
+}
+
+export async function abandonLocalGrant(env, grantId) {
+  if (!env.CONTACTS) throw new OwnerAuthError('forbidden', 403);
+  await env.CONTACTS.prepare(
+    'UPDATE owner_local_grants SET revoked_at = ? WHERE grant_id = ? AND revoked_at IS NULL'
+  ).bind(nowSeconds(), grantId).run();
+}
+
 export async function verifyLocalGrant(env, props, ownerId, epoch, tokenScope) {
   if (props?.ownerClientClass !== 'local' || !props.localGrantId || !props.localClientId
       || !env.CONTACTS) throw new OwnerAuthError('forbidden', 403);
   const saved = await registeredLocalClient(env);
   if (!saved || saved.clientId !== props.localClientId) throw new OwnerAuthError('forbidden', 403);
   const grant = await env.CONTACTS.prepare(
-    'SELECT grant_id, owner_subject, client_id, scope, resource, epoch, expires_at, revoked_at FROM owner_local_grants WHERE grant_id = ?'
+    'SELECT grant_id, owner_subject, client_id, scope, resource, epoch, expires_at, activated_at, revoked_at FROM owner_local_grants WHERE grant_id = ?'
   ).bind(props.localGrantId).first();
   if (!grant || grant.owner_subject !== ownerId || grant.client_id !== saved.clientId
       || grant.epoch !== epoch || grant.resource !== OWNER_RESOURCE
-      || grant.revoked_at !== null || grant.expires_at <= nowSeconds()) throw new OwnerAuthError('forbidden', 403);
+      || grant.activated_at === null || grant.revoked_at !== null || grant.expires_at <= nowSeconds()) throw new OwnerAuthError('forbidden', 403);
   let granted;
   try { granted = JSON.parse(grant.scope); } catch { throw new OwnerAuthError('forbidden', 403); }
   if (!Array.isArray(granted) || !Array.isArray(tokenScope)
@@ -74,7 +89,7 @@ export async function verifyLocalGrant(env, props, ownerId, epoch, tokenScope) {
 export async function listLocalGrants(env) {
   if (!env.CONTACTS) throw new OwnerAuthError('forbidden', 403);
   const result = await env.CONTACTS.prepare(
-    'SELECT grant_id, client_id, scope, issued_at, expires_at, revoked_at FROM owner_local_grants ORDER BY issued_at DESC, grant_id DESC LIMIT 50'
+    'SELECT grant_id, client_id, scope, issued_at, expires_at, activated_at, revoked_at FROM owner_local_grants WHERE activated_at IS NOT NULL ORDER BY issued_at DESC, grant_id DESC LIMIT 50'
   ).all();
   const registeredClient = await env.OAUTH_KV?.get(CLIENT_RECORD, 'json');
   return { status: 'ok', local_client: registeredClient?.clientId
