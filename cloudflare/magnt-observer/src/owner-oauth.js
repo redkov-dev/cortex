@@ -29,10 +29,14 @@ export const authorizationServer = new OAuthAuthorizationServer({
       let grant;
       try { grant = await verifyLocalGrant(env, props, userId, config.epoch, scope); }
       catch { throw new OAuthError('invalid_grant', { description: 'Local owner authorization has expired or was revoked.' }); }
-      // Absolute expiry cannot be extended by refresh rotation.
+      // D1 grant expiry is authoritative on both resource use and refresh. In v1.2.4
+      // refreshTokenTTL is applied only to the initial code exchange (defense in depth).
+      // refreshTokenIdleTTL IS honored during refresh, so set it to the remaining
+      // absolute lifetime rather than the ChatGPT-specific 30-day idle window.
       const secondsLeft = grant.expires_at - Math.floor(Date.now() / 1000);
-      if (secondsLeft <= 0) throw new OAuthError('invalid_grant', { description: 'Local grant has expired.' });
-      return { refreshTokenTTL: scope.includes('offline_access') ? secondsLeft : 0 };
+      if (secondsLeft < 60) throw new OAuthError('invalid_grant', { description: 'Local grant expires too soon for renewal.' });
+      return { refreshTokenTTL: scope.includes('offline_access') ? secondsLeft : 0,
+        refreshTokenIdleTTL: scope.includes('offline_access') ? secondsLeft : 0 };
     }
     return { refreshTokenTTL: scope.includes('offline_access') ? 2592000 : 0 };
   },
