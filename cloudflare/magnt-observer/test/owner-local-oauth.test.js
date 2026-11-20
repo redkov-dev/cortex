@@ -17,10 +17,10 @@ const form = (f, route, fields, headers = {}) => f.edge.fetch(OWNER + route, {
   method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
   body: new URLSearchParams(fields), redirect: 'manual',
 });
-async function registeredFixture(t) {
+async function registeredFixture(t, extraOverrides = {}) {
   const f = await fixture(t, { through: 8, overrides: { OWNER_LOCAL_CLIENT_SEED_ENABLED: 'true',
     OWNER_LOCAL_CLIENT_ENABLED: 'true', OWNER_DCR_ENABLED: 'false',
-    DIALOGUE_CREATE_ENABLED: 'true', DIALOGUE_READ_ENABLED: 'true', DIALOGUE_WRITE_ENABLED: 'true' } });
+    DIALOGUE_CREATE_ENABLED: 'true', DIALOGUE_READ_ENABLED: 'true', DIALOGUE_WRITE_ENABLED: 'true', ...extraOverrides } });
   const response = await f.control.fetch('https://fixture.local/seed-local', { method: 'POST', body: '{}' });
   const client = await response.json();
   assert.equal(response.status, 200, JSON.stringify(client));
@@ -130,4 +130,78 @@ test('local grant absolute expiry blocks access without waiting for bearer expir
   const refreshed = await form(f, '/oauth/token', { grant_type: 'refresh_token',
     client_id: client.clientId, refresh_token: credentials.refresh_token, resource: OWNER + '/mcp' });
   assert.equal(refreshed.status, 400);
+});
+
+test('rotating refresh rejects the old token and respects 90-day absolute grant time', { timeout: 60000 }, async t => {
+  const { f, client } = await registeredFixture(t);
+  const start = await authorize(f, await begin(f, client));
+  const first = await form(f, '/oauth/token', { grant_type: 'refresh_token',
+    client_id: client.clientId, refresh_token: start.refresh_token, resource: OWNER + '/mcp' });
+  const rotated = await first.json();
+  assert.equal(first.status, 200, JSON.stringify(rotated));
+  assert.ok(rotated.refresh_token);
+  assert.notEqual(rotated.refresh_token, start.refresh_token);
+  assert.equal((await f.raw('tools/list', {}, { token: rotated.access_token })).status, 200);
+  const old = await form(f, '/oauth/token', { grant_type: 'refresh_token',
+    client_id: client.clientId, refresh_token: start.refresh_token, resource: OWNER + '/mcp' });
+  assert.equal(old.status, 400);
+  // Renewal must not silently renew server-side absolute expiry.
+  const record = await f.db.prepare('SELECT issued_at, expires_at FROM owner_local_grants').first();
+  assert.equal(record.expires_at - record.issued_at, 90 * 86400);
+});
+
+test('two independent local grants allow revoking one without affecting the other', { timeout: 60000 }, async t => {
+  const { f, client } = await registeredFixture(t);
+  const a = await authorize(f, await begin(f, client));
+  const b = await authorize(f, await begin(f, client));
+  const primary = await f.mint({ ownerClientClass: 'chatgpt' });
+  const first = await f.call('list_owner_grants', {}, { token: primary.access_token });
+  assert.equal(first.value.grants.length, 2);
+  const id = first.value.grants[0].grant_id;
+  await f.call('revoke_owner_grant', { grant_id: id }, { token: primary.access_token });
+  const results = await Promise.all([a,b].map(tkn => f.raw('tools/list', {}, { token: tkn.access_token })));
+  assert.deepEqual(results.map(x=>x.status).sort(), [200,403]);
+  assert.equal((await f.raw('tools/list', {}, { token: primary.access_token })).status, 200);
+});
+
+test('disabled C.1 cannot leak OAuth grant management tools into local listings', { timeout: 60000 }, async t => {
+  const { f, client } = await registeredFixture(t, {
+    DIALOGUE_CREATE_ENABLED: 'false', DIALOGUE_READ_ENABLED: 'false', DIALOGUE_WRITE_ENABLED: 'false',
+  });
+  const local = await authorize(f, await begin(f, client));
+  const primary = await f.mint({ ownerClientClass: 'chatgpt' });
+  const trusted = await f.raw('tools/list', {}, { token: primary.access_token });
+  assert.equal(trusted.status, 200);
+  assert.ok((await trusted.json()).result.tools.some(x => x.name === 'revoke_owner_grant'));
+  const localList = await f.raw('tools/list', {}, { token: local.access_token });
+  assert.equal(localList.status, 200);
+  const names = (await localList.json()).result.tools.map(x => x.name);
+  assert.deepEqual(names.sort(), ['list_inbox','read_conversation','update_inbox','write_reply'].sort());
+  assert.equal((await f.raw('tools/call', { name: 'revoke_owner_grant',
+    arguments: { grant_id: crypto.randomUUID() } }, { token: local.access_token })).status, 403);
+});
+
+test('resource and PKCE are mandatory for local authorization', { timeout: 60000 }, async t => {
+  const { f, client } = await registeredFixture(t);
+  const base = OWNER + '/authorize?' + new URLSearchParams({
+    response_type: 'code', client_id: client.clientId, redirect_uri: CALLBACK,
+    scope: FULL_SCOPE, state: 's', code_challenge: createHash('sha256').update('p'.repeat(64)).digest('base64url'),
+    code_challenge_method: 'S256', resource: OWNER + '/mcp',
+  });
+  const bad = [
+    { resource: null },
+    { resource: 'https://magnt.ru/mcp' },
+    { code_challenge_method: null },
+    { client_id: 'wrong-client-id' },
+  ];
+  for(const obj of bad){
+    const u = new URL(base);
+    for(const [k,val] of Object.entries(obj)) if(val===null)u.searchParams.delete(k);else u.searchParams.set(k,val);
+    const response = await f.edge.fetch(u);
+    assert.equal(response.status, 400, u.searchParams.toString());
+  }
+  const tokens = await authorize(f, await begin(f, client));
+  const badRefresh = await form(f,'/oauth/token', {grant_type:'refresh_token',
+    client_id:client.clientId,refresh_token:tokens.refresh_token,resource:'https://magnt.ru/mcp'});
+  assert.equal(badRefresh.status, 400);
 });
