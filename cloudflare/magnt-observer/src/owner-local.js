@@ -76,7 +76,10 @@ export async function listLocalGrants(env) {
   const result = await env.CONTACTS.prepare(
     'SELECT grant_id, client_id, scope, issued_at, expires_at, revoked_at FROM owner_local_grants ORDER BY issued_at DESC, grant_id DESC LIMIT 50'
   ).all();
-  return { status: 'ok', grants: result.results ?? [] };
+  const registeredClient = await env.OAUTH_KV?.get(CLIENT_RECORD, 'json');
+  return { status: 'ok', local_client: registeredClient?.clientId
+    ? { client_id: registeredClient.clientId, redirect_uri: LOCAL_CALLBACK } : null,
+    grants: result.results ?? [] };
 }
 export async function revokeLocalGrant(env, grantId) {
   if (!env.CONTACTS) throw new OwnerAuthError('forbidden', 403);
