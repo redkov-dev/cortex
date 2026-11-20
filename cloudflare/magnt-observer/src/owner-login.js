@@ -110,9 +110,8 @@ export async function handleOwnerLogin(request, env, oauth) {
         return privateJson({ code: 'invalid_authorization_request' }, 400);
       }
       const local = await isRegisteredLocalClient(env, original.clientId, original.redirectUri);
-      const props = { ownerId, epoch: env.OWNER_AUTH_EPOCH };
+      const props = { ownerId, epoch: env.OWNER_AUTH_EPOCH, ownerClientClass: local ? 'local' : 'chatgpt' };
       if (local) {
-        props.ownerClientClass = 'local';
         props.localClientId = original.clientId;
         props.localGrantId = await issueLocalGrant(env, original, ownerId, approvedScope);
       }
