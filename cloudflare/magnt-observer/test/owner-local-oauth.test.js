@@ -142,6 +142,12 @@ test('rotating refresh rejects the old token and respects 90-day absolute grant 
   assert.ok(rotated.refresh_token);
   assert.notEqual(rotated.refresh_token, start.refresh_token);
   assert.equal((await f.raw('tools/list', {}, { token: rotated.access_token })).status, 200);
+  // The Cloudflare provider intentionally permits the immediately previous refresh
+  // token for lost-response recovery; after consuming the current token, the one
+  // preceding that grace window must be rejected.
+  const next = await form(f, '/oauth/token', { grant_type: 'refresh_token',
+    client_id: client.clientId, refresh_token: rotated.refresh_token, resource: OWNER + '/mcp' });
+  assert.equal(next.status, 200, await next.text());
   const old = await form(f, '/oauth/token', { grant_type: 'refresh_token',
     client_id: client.clientId, refresh_token: start.refresh_token, resource: OWNER + '/mcp' });
   assert.equal(old.status, 400);
