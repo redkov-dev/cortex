@@ -31,7 +31,7 @@ export const authorizationServer = new OAuthAuthorizationServer({
       catch { throw new OAuthError('invalid_grant', { description: 'Local owner authorization has expired or was revoked.' }); }
       // Absolute expiry cannot be extended by refresh rotation.
       const secondsLeft = grant.expires_at - Math.floor(Date.now() / 1000);
-      if (secondsLeft <= 0) throw new OAuthError('invalid_grant');
+      if (secondsLeft <= 0) throw new OAuthError('invalid_grant', { description: 'Local grant has expired.' });
       return { refreshTokenTTL: scope.includes('offline_access') ? secondsLeft : 0 };
     }
     return { refreshTokenTTL: scope.includes('offline_access') ? 2592000 : 0 };
