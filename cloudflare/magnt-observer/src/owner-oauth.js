@@ -35,8 +35,10 @@ export const authorizationServer = new OAuthAuthorizationServer({
       // absolute lifetime rather than the ChatGPT-specific 30-day idle window.
       const secondsLeft = grant.expires_at - Math.floor(Date.now() / 1000);
       if (secondsLeft < 60) throw new OAuthError('invalid_grant', { description: 'Local grant expires too soon for renewal.' });
-      return { refreshTokenTTL: scope.includes('offline_access') ? secondsLeft : 0,
-        refreshTokenIdleTTL: scope.includes('offline_access') ? secondsLeft : 0 };
+      const offline = scope.includes('offline_access');
+      // A zero idle TTL is invalid; omit the optional property when no refresh is issued.
+      return offline ? { refreshTokenTTL: secondsLeft, refreshTokenIdleTTL: secondsLeft }
+        : { refreshTokenTTL: 0 };
     }
     return { refreshTokenTTL: scope.includes('offline_access') ? 2592000 : 0 };
   },
