@@ -96,6 +96,10 @@ export async function handleOwnerOAuth(request, env, ctx) {
       }
     } catch { return privateJson({ error: 'invalid_client' }, 400); }
     if (!isAllowedClientId(clientId)) return privateJson({ error: 'invalid_client' }, 400);
+    const localClient = await registeredLocalClient(env);
+    if (localClient?.clientId === clientId && fields.resource !== OWNER_RESOURCE) {
+      return privateJson({ error: 'invalid_target' }, 400);
+    }
   }
   if (url.pathname === '/mcp' || url.pathname === '/.well-known/oauth-protected-resource/mcp'
       || url.pathname === '/.well-known/oauth-protected-resource') return resourceServer.fetch(request, env, ctx);
