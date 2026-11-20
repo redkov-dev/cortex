@@ -1,18 +1,20 @@
 import { AuthorizationError, authorizationErrorRedirect } from '@cloudflare/workers-oauth-provider';
 import { OWNER_ORIGIN, OWNER_RESOURCE, OWNER_SCOPES, isChatGptRedirect, isAllowedClientId, privateJson } from './owner-auth.js';
 import { readBody } from './mcp-transport.js';
+import { isRegisteredLocalClient, issueLocalGrant, registeredLocalClient } from './owner-local.js';
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const base64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const challenge = async value => base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))));
 
-function allowedRequest(request) {
-  return isAllowedClientId(request.clientId) && isChatGptRedirect(request.redirectUri)
-    && request.resource === OWNER_RESOURCE && request.codeChallengeMethod === 'S256'
+async function allowedRequest(request, env) {
+  const clientAllowed = isAllowedClientId(request.clientId) && (isChatGptRedirect(request.redirectUri)
+    || await isRegisteredLocalClient(env, request.clientId, request.redirectUri));
+  return clientAllowed && request.resource === OWNER_RESOURCE && request.codeChallengeMethod === 'S256'
     && typeof request.codeChallenge === 'string'
     && request.scope.includes('magnt.owner.read') && request.scope.every(scope => OWNER_SCOPES.includes(scope));
 }
-function consentHtml(details, handle, scopes) {
+function consentHtml(details, handle, scopes, localClient = false) {
   return `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Подключение MAGNT Owner</title><body><main><h1>Подключить MAGNT Owner</h1>
 <p>Приложение: <strong>${escapeHtml(details.clientName)}</strong>.</p>
@@ -21,9 +23,9 @@ function consentHtml(details, handle, scopes) {
 <p>Доступ получит только настроенный владелец MAGNT. На следующем шаге подтвердите его аккаунтом GitHub.</p>
 <form method="post" action="/authorize"><input type="hidden" name="handle" value="${escapeHtml(handle)}">
 <p><label><input type="checkbox" name="scope" value="magnt.owner.read" checked required> Читать частные обращения и цели</label></p>
-${scopes.includes('magnt.owner.write') ? '<p><label><input type="checkbox" name="scope" value="magnt.owner.write" checked> Сохранять черновики и управлять входящими по моей команде</label></p>' : ''}
+${scopes.includes('magnt.owner.write') ? '<p><label><input type="checkbox" name="scope" value="magnt.owner.write" checked> Публиковать ответы, изменять входящие и управлять токенами публичных диалогов</label></p>' : ''}
 ${scopes.includes('offline_access') ? '<p><label><input type="checkbox" name="scope" value="offline_access" checked> Сохранять подключение с автоматическим обновлением доступа</label></p>' : ''}
-<p>Черновики не отправляются посетителям. Подключение истекает после 30 дней без обновления; его можно отозвать.</p>
+<p>${localClient ? 'Локальное подключение действительно 90 суток с момента подтверждения. Отозвать доступ можно раньше. Передача разрешения локальному агенту позволяет ему публиковать ответы и управлять публичными диалогами без дополнительного серверного подтверждения.' : 'Подключение истекает после 30 дней без обновления; его можно отозвать.'}</p>
 <button name="decision" value="approve">Продолжить через GitHub</button>
 <button name="decision" value="deny" formnovalidate>Отмена</button></form></main></body></html>`;
 }
@@ -58,18 +60,22 @@ export async function handleOwnerLogin(request, env, oauth) {
   if (!env.OWNER_GITHUB_CLIENT_ID || !env.OWNER_GITHUB_CLIENT_SECRET) return privateJson({ code: 'owner_configuration_required' }, 503);
   try {
     if (url.pathname === '/authorize' && request.method === 'GET') {
-      if (!isAllowedClientId(url.searchParams.get('client_id')) || !isChatGptRedirect(url.searchParams.get('redirect_uri'))) {
+      const identifier = url.searchParams.get('client_id');
+      const incomingRedirect = url.searchParams.get('redirect_uri');
+      if (!isAllowedClientId(identifier) || !(isChatGptRedirect(incomingRedirect)
+        || await isRegisteredLocalClient(env, identifier, incomingRedirect))) {
         return privateJson({ code: 'invalid_client' }, 400);
       }
       const parsed = await oauth.parseAuthRequest(request);
-      if (!allowedRequest(parsed)) return privateJson({ code: 'invalid_authorization_request' }, 400);
+      if (!await allowedRequest(parsed, env)) return privateJson({ code: 'invalid_authorization_request' }, 400);
       const details = await oauth.describeConsent(parsed);
       const consent = await oauth.beginConsent(parsed);
       consent.headers.set('content-type', 'text/html; charset=utf-8');
       // Chromium checks form-action on redirects too: approval goes to GitHub,
       // cancellation to the ChatGPT callback already validated by allowedRequest.
       consent.headers.set('content-security-policy', `default-src 'none'; form-action 'self' https://github.com/login/oauth/authorize ${parsed.redirectUri}; frame-ancestors 'none'; base-uri 'none'`);
-      return new Response(consentHtml(details, consent.handle, parsed.scope), { headers: consent.headers });
+      return new Response(consentHtml(details, consent.handle, parsed.scope,
+        await isRegisteredLocalClient(env, parsed.clientId, parsed.redirectUri)), { headers: consent.headers });
     }
     if (url.pathname === '/authorize' && request.method === 'POST') {
       if (request.headers.get('origin') !== OWNER_ORIGIN) return privateJson({ code: 'invalid_origin' }, 403);
@@ -82,9 +88,11 @@ export async function handleOwnerLogin(request, env, oauth) {
       const scope = form.getAll('scope').map(String);
       if (!scope.includes('magnt.owner.read') || scope.some(s => !OWNER_SCOPES.includes(s))) return privateJson({ code: 'invalid_scope' }, 400);
       const approved = await oauth.approveConsent(request, handle, { scope });
-      if (!allowedRequest(approved.request)) return privateJson({ code: 'invalid_authorization_request' }, 400);
+      if (!await allowedRequest(approved.request, env) || scope.some(s => !approved.request.scope.includes(s))) {
+        return privateJson({ code: 'invalid_authorization_request' }, 400);
+      }
       const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));
-      const { state, headers } = await oauth.beginUpstream(approved.request, { data: { verifier }, headers: approved.headers });
+      const { state, headers } = await oauth.beginUpstream(approved.request, { data: { verifier, approvedScope: scope }, headers: approved.headers });
       const next = new URL('https://github.com/login/oauth/authorize');
       next.search = new URLSearchParams({ client_id: env.OWNER_GITHUB_CLIENT_ID, redirect_uri: OWNER_ORIGIN + '/callback',
         state, code_challenge: await challenge(verifier), code_challenge_method: 'S256' }).toString();
@@ -92,12 +100,24 @@ export async function handleOwnerLogin(request, env, oauth) {
     }
     if (url.pathname === '/callback' && request.method === 'GET') {
       const { request: original, data, headers } = await oauth.finishUpstream(request);
-      if (!allowedRequest(original)) return privateJson({ code: 'invalid_authorization_request' }, 400);
+      if (!await allowedRequest(original, env)) return privateJson({ code: 'invalid_authorization_request' }, 400);
       if (url.searchParams.has('error')) return redirect(headers, authorizationErrorRedirect(original, 'access_denied'));
       const ownerId = await githubIdentity(url.searchParams.get('code'), data.verifier, env);
       if (ownerId !== env.OWNER_GITHUB_ID) return redirect(headers, authorizationErrorRedirect(original, 'access_denied'));
+      const approvedScope = data?.approvedScope;
+      if (!Array.isArray(approvedScope) || !approvedScope.includes('magnt.owner.read')
+          || approvedScope.some(s => !original.scope.includes(s) || !OWNER_SCOPES.includes(s))) {
+        return privateJson({ code: 'invalid_authorization_request' }, 400);
+      }
+      const local = await isRegisteredLocalClient(env, original.clientId, original.redirectUri);
+      const props = { ownerId, epoch: env.OWNER_AUTH_EPOCH };
+      if (local) {
+        props.ownerClientClass = 'local';
+        props.localClientId = original.clientId;
+        props.localGrantId = await issueLocalGrant(env, original, ownerId, approvedScope);
+      }
       const { redirectTo } = await oauth.completeAuthorization({ request: original, userId: ownerId, metadata: {},
-        scope: original.scope, props: { ownerId, epoch: env.OWNER_AUTH_EPOCH } });
+        scope: approvedScope, props });
       return redirect(headers, redirectTo);
     }
     return privateJson({ code: 'not_found' }, 404);
