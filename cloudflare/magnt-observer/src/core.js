@@ -1,6 +1,6 @@
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { handleMcp } from './mcp.js';
-import { handleOwnerOAuth } from './owner-oauth.js';
+import { handleOwnerOAuth, seedOwnerLocalRegistration } from './owner-oauth.js';
 import { boundOwnerRequest, protectOwnerResponse } from './owner-http.js';
 import { privateJson } from './owner-auth.js';
 import { processOwnerNotifications } from './owner-notifications.js';
@@ -9,6 +9,10 @@ import { processOwnerNotifications } from './owner-notifications.js';
 export default class PrivateCore extends WorkerEntrypoint {
   fetch() { return privateJson({ code: 'not_found' }, 404); }
   async scheduled() {
+    if (this.env.OWNER_LOCAL_CLIENT_SEED_ENABLED === 'true') {
+      try { await seedOwnerLocalRegistration(this.env); }
+      catch { console.log(JSON.stringify({ event_type: 'owner_local_client_seed', outcome: 'failure' })); }
+    }
     if (this.env.CORE_NOTIFICATIONS_ENABLED === 'true') await processOwnerNotifications(this.env);
   }
 }

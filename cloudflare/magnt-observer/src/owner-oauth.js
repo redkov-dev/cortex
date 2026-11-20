@@ -3,6 +3,7 @@ import { ownerActor, ownerAuthConfiguration, OwnerAuthError, OWNER_ORIGIN, OWNER
   OWNER_READ_SCOPE, OWNER_WRITE_SCOPE, OWNER_SCOPES, isChatGptRedirect, isAllowedClientId, privateJson } from './owner-auth.js';
 import { handleOwnerLogin } from './owner-login.js';
 import { handleOwnerMcp } from './owner-mcp.js';
+import { registeredLocalClient, seedOwnerLocalClient, verifyLocalGrant } from './owner-local.js';
 
 export const authorizationServer = new OAuthAuthorizationServer({
   issuer: OWNER_ORIGIN, resources: [OWNER_RESOURCE], defaultResource: OWNER_RESOURCE,
@@ -16,13 +17,28 @@ export const authorizationServer = new OAuthAuthorizationServer({
       return { code: 'invalid_redirect_uri', description: 'Only ChatGPT callbacks are supported.' };
     }
   },
-  tokenExchangeCallback({ env, props, userId, resource, scope }) {
+  async tokenExchangeCallback({ env, props, userId, resource, scope }) {
     let config;
     try { config = ownerAuthConfiguration(env); }
     catch { throw new OAuthError('temporarily_unavailable', { description: 'Owner access is disabled.', statusCode: 503 }); }
     if (userId !== config.subject || props?.ownerId !== config.subject || props?.epoch !== config.epoch
         || resource !== OWNER_RESOURCE || !scope.includes(OWNER_READ_SCOPE)) {
       throw new OAuthError('invalid_grant', { description: 'Owner authorization was revoked.' });
+    }
+    if (props?.ownerClientClass === 'local') {
+      let grant;
+      try { grant = await verifyLocalGrant(env, props, userId, config.epoch, scope); }
+      catch { throw new OAuthError('invalid_grant', { description: 'Local owner authorization has expired or was revoked.' }); }
+      // D1 grant expiry is authoritative on both resource use and refresh. In v1.2.4
+      // refreshTokenTTL is applied only to the initial code exchange (defense in depth).
+      // refreshTokenIdleTTL IS honored during refresh, so set it to the remaining
+      // absolute lifetime rather than the ChatGPT-specific 30-day idle window.
+      const secondsLeft = grant.expires_at - Math.floor(Date.now() / 1000);
+      if (secondsLeft < 60) throw new OAuthError('invalid_grant', { description: 'Local grant expires too soon for renewal.' });
+      const offline = scope.includes('offline_access');
+      // A zero idle TTL is invalid; omit the optional property when no refresh is issued.
+      return offline ? { refreshTokenTTL: secondsLeft, refreshTokenIdleTTL: secondsLeft }
+        : { refreshTokenTTL: 0 };
     }
     return { refreshTokenTTL: scope.includes('offline_access') ? 2592000 : 0 };
   },
@@ -33,14 +49,21 @@ const resourceServer = new OAuthResourceServer({
   validateToken: env => (resource, token) => authorizationServer.validateToken(resource, token, env),
   handler: { async fetch(request, env, ctx) {
     let actor;
-    try { actor = ownerActor(env, ctx.auth, ctx.props); }
+    try {
+      actor = ownerActor(env, ctx.auth, ctx.props);
+      if (actor.ownerClientClass === 'local') {
+        await verifyLocalGrant(env, ctx.props, actor.subject, env.OWNER_AUTH_EPOCH, ctx.auth.scope);
+      }
+    }
     catch (error) {
       if (error instanceof OwnerAuthError && error.code === 'insufficient_scope') return insufficientScope(ctx.auth, [OWNER_READ_SCOPE]);
       return privateJson({ code: error instanceof OwnerAuthError ? error.code : 'authentication_unavailable' }, error instanceof OwnerAuthError ? error.status : 503);
     }
     if (request.method === 'POST') {
       const body = await request.clone().json().catch(() => null);
-      if (body?.method === 'tools/call' && ['write_reply', 'update_inbox', 'manage_dialogue_access'].includes(body.params?.name)
+      if (body?.method === 'tools/call' && ['list_owner_grants', 'revoke_owner_grant'].includes(body.params?.name)
+          && actor.ownerClientClass !== 'chatgpt') return privateJson({ code: 'forbidden' }, 403);
+      if (body?.method === 'tools/call' && ['write_reply', 'update_inbox', 'manage_dialogue_access', 'list_owner_grants', 'revoke_owner_grant'].includes(body.params?.name)
           && !ctx.auth.scope.includes(OWNER_WRITE_SCOPE)) return insufficientScope(ctx.auth, [OWNER_READ_SCOPE, OWNER_WRITE_SCOPE]);
     }
     const event = { event_type: 'owner_mcp_request', time: new Date().toISOString(), event_id: crypto.randomUUID() };
@@ -48,6 +71,10 @@ const resourceServer = new OAuthResourceServer({
     finally { console.log(JSON.stringify(event)); }
   } },
 });
+export async function seedOwnerLocalRegistration(env) {
+  return seedOwnerLocalClient(env, authorizationServer.getOAuthApi(env));
+}
+
 export async function handleOwnerOAuth(request, env, ctx) {
   try { ownerAuthConfiguration(env); }
   catch (error) { return privateJson({ code: error.code ?? 'owner_configuration_required' }, error.status ?? 503); }
@@ -71,6 +98,10 @@ export async function handleOwnerOAuth(request, env, ctx) {
       }
     } catch { return privateJson({ error: 'invalid_client' }, 400); }
     if (!isAllowedClientId(clientId)) return privateJson({ error: 'invalid_client' }, 400);
+    const localClient = await registeredLocalClient(env);
+    if (localClient?.clientId === clientId && fields.resource !== OWNER_RESOURCE) {
+      return privateJson({ error: 'invalid_target' }, 400);
+    }
   }
   if (url.pathname === '/mcp' || url.pathname === '/.well-known/oauth-protected-resource/mcp'
       || url.pathname === '/.well-known/oauth-protected-resource') return resourceServer.fetch(request, env, ctx);

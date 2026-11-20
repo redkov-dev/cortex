@@ -1,10 +1,15 @@
 // Local-only grant issuer for adversarial test credentials. Never a deployment entrypoint.
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { OAuthAuthorizationServer } from '@cloudflare/workers-oauth-provider';
+import { seedOwnerLocalRegistration } from '../../src/owner-oauth.js';
 import { OWNER_ORIGIN, OWNER_RESOURCE, OWNER_SCOPES } from '../../src/owner-auth.js';
 export { default, PublicApi, OwnerApi } from '../../src/core.js';
 export class TestControl extends WorkerEntrypoint {
   async fetch(request) {
+    if (new URL(request.url).pathname === '/seed-local') {
+      const client = await seedOwnerLocalRegistration(this.env);
+      return Response.json(client ?? { error: 'seeding_disabled' }, { status: client ? 200 : 403 });
+    }
     const options = await request.json();
     const issuer = new OAuthAuthorizationServer({ issuer: OWNER_ORIGIN, resources: [OWNER_RESOURCE],
       scopesSupported: OWNER_SCOPES, accessTokenTTL: options.ttl ?? 900, onError: () => undefined });
@@ -24,7 +29,8 @@ export class TestControl extends WorkerEntrypoint {
     const { redirectTo } = await api.completeAuthorization({
       request: { responseType: 'code', clientId: client.clientId, redirectUri: client.redirectUris[0],
         resource: OWNER_RESOURCE, issuer: OWNER_ORIGIN, scope, state: 'test', codeChallenge, codeChallengeMethod: 'S256' },
-      userId: options.userId ?? '1', metadata: {}, scope, props: { ownerId: options.userId ?? '1', epoch: options.epoch ?? '1' },
+      userId: options.userId ?? '1', metadata: {}, scope, props: { ownerId: options.userId ?? '1', epoch: options.epoch ?? '1',
+        ...(options.ownerClientClass ? { ownerClientClass: options.ownerClientClass } : {}) },
     });
     const response = await issuer.fetch(new Request(OWNER_ORIGIN + '/oauth/token', {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
