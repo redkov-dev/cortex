@@ -8,6 +8,7 @@ import { dialogueEnabled, dialogueWritable } from './dialogue-common.js';
 import { readDialogueMetadata, findDialogue, listMessages, findMessage } from './dialogues.js';
 import { readReceipts, readStatus, markMessagesRead, readReceiptOverview } from './message-reads.js';
 import { publishReply, manageDialogueAccess } from './dialogue-workflow.js';
+import { listLocalGrants, revokeLocalGrant } from './owner-local.js';
 
 // Conservative budget for both structured data and an escaped JSON text copy.
 const responseSize = value => 2 * new TextEncoder().encode(JSON.stringify(JSON.stringify(value))).byteLength;
@@ -181,9 +182,14 @@ async function readConversation(db, actor, input, env) {
 }
 
 export async function runOwnerOperation(env, actor, tool, rawInput) {
-  const writing = ['write_reply', 'update_inbox', 'manage_dialogue_access'].includes(tool);
+  const writing = ['write_reply', 'update_inbox', 'manage_dialogue_access', 'list_owner_grants', 'revoke_owner_grant'].includes(tool);
   requireOwner(actor, writing);
   const input = validateOwnerInput(tool, rawInput);
+  // Full existing Owner capabilities are available to local agents, but OAuth grant management is not.
+  if (tool === 'list_owner_grants' || tool === 'revoke_owner_grant') {
+    if (actor.ownerClientClass === 'local') throw new OwnerError('forbidden');
+    return tool === 'list_owner_grants' ? listLocalGrants(env) : revokeLocalGrant(env, input.grant_id);
+  }
   const db = env.CONTACTS;
   if (!db) throw new OwnerError('storage_unavailable');
   if (tool === 'list_inbox') return listInbox(db, actor, input, {
